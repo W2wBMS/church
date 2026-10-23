@@ -1,7 +1,7 @@
 import 'dotenv/config';
 
 // Centralized, validated configuration. All secrets come from the environment;
-// nothing sensitive is ever committed. See server/.env.example.
+// nothing sensitive is ever committed. See backend/.env.example.
 const required = (name, fallback) => {
   const v = process.env[name] ?? fallback;
   if (v === undefined) {
@@ -24,19 +24,26 @@ if (process.env.NODE_ENV === 'production' && corsOrigins.length === 0) {
   throw new Error('CORS_ORIGINS must be configured in production');
 }
 
+const supabaseDatabaseUrl = process.env.SUPABASE_DB_URL?.trim();
+if (!supabaseDatabaseUrl) {
+  throw new Error('Missing required env var: SUPABASE_DB_URL');
+}
+let supabaseDatabaseProtocol;
+try {
+  supabaseDatabaseProtocol = new URL(supabaseDatabaseUrl).protocol;
+} catch {
+  throw new Error('SUPABASE_DB_URL must be a valid PostgreSQL connection string');
+}
+if (!['postgres:', 'postgresql:'].includes(supabaseDatabaseProtocol)) {
+  throw new Error('SUPABASE_DB_URL must be a PostgreSQL connection string');
+}
+
 export const config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '4000', 10),
 
-  // Postgres — either a single DATABA SE_URL or discrete PG* vars.
-  databaseUrl: process.env.DATABASE_URL || null,
-  pg: {
-    host: process.env.PGHOST || 'localhost',
-    port: parseInt(process.env.PGPORT || '5432', 10),
-    user: process.env.PGUSER || 'church2',
-    password: process.env.PGPASSWORD || 'church2',
-    database: process.env.PGDATABASE || 'church2',
-  },
+  // Supabase PostgreSQL connection string from the Supabase project dashboard.
+  supabaseDatabaseUrl,
 
   // Auth
   jwtSecret,

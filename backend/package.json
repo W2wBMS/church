@@ -1,7 +1,7 @@
 {
-  "name": "church2-server",
+  "name": "church2-backend",
   "version": "1.0.0",
-  "description": "Church 2.0 production API — Node/Express + PostgreSQL",
+  "description": "Church 2.0 production API — Node/Express + Supabase",
   "type": "module",
   "main": "src/index.js",
   "scripts": {

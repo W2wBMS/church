@@ -1,7 +1,7 @@
 // Church 2.0 Node-based Unit Test Suite
 // Verifies core algorithms, calculation pipelines, and NLP categorization
 
-const AIEngine = require('./ai-engine');
+const AIEngine = require('./frontend/ai-engine');
 
 let passedTestsCount = 0;
 let failedTestsCount = 0;

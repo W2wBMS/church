@@ -1,6 +1,6 @@
 # Church 2.0 API
 
-The backend is an Express API backed by PostgreSQL. All routes use the `/api` prefix. The API listens on port `4000` by default; configure `PORT`, database settings, and allowed production origins in the server environment.
+The backend is an Express API backed by Supabase PostgreSQL. All routes use the `/api` prefix. The API listens on port `4000` by default; configure `PORT`, `SUPABASE_DB_URL`, and allowed production origins in the server environment.
 
 ## Authentication
 
@@ -50,7 +50,7 @@ The canonical campus IDs provisioned by the schema are `b1` (Accra Main), `b2` (
 
 | Method | Route | Access | Behavior |
 |---|---|---|---|
-| `GET` | `/health` | Public | Reports API and PostgreSQL health. |
+| `GET` | `/health` | Public | Reports API and Supabase PostgreSQL health. |
 | `GET` | `/members` | Authenticated | Lists members in permitted scope; optional `search` parameter. Members only receive their own record. |
 | `GET` | `/members/:id` | Authenticated | Returns a scoped member profile. |
 | `PATCH` | `/members/:id/milestones` | HQ/branch admin | Replaces the member's spiritual milestone list (up to 100 entries) in permitted scope. |
@@ -61,7 +61,7 @@ The canonical campus IDs provisioned by the schema are `b1` (Accra Main), `b2` (
 | `POST` | `/transactions` | Authenticated | Records a valid contribution. Members may record only their own contributions. |
 | `DELETE` | `/transactions/:id` | HQ/branch admin | Permanently removes a transaction in permitted scope. |
 | `GET` | `/collection-sessions` | HQ/branch admin | Lists saved collection sessions in scope. |
-| `POST` | `/collection-sessions` | HQ/branch admin | Records offering, tithe, and other amounts; total is calculated by PostgreSQL. |
+| `POST` | `/collection-sessions` | HQ/branch admin | Records offering, tithe, and other amounts; total is calculated by Supabase PostgreSQL. |
 | `DELETE` | `/collection-sessions/:id` | HQ/branch admin | Permanently removes a collection session in permitted scope. |
 | `GET` | `/attendance` | Authenticated | Lists individual check-ins in scope; members only see their own. |
 | `PUT` | `/attendance` | HQ/branch admin/ministry leader | Creates or updates a member check-in. Requires a valid `YYYY-MM-DD` date and boolean `present`. |

@@ -1,8 +1,8 @@
 name: Vercel Deploy
 
 # Deploys the static frontend to Vercel. Everything the deploy needs is already
-# in the repo (vercel.json publishes the root as static; .vercelignore excludes
-# server/ and deploy/), so the only setup is one repository secret:
+# in the repo (vercel.json publishes frontend/ as static; .vercelignore excludes
+# backend/ and deploy/), so the only setup is one repository secret:
 #
 #   VERCEL_TOKEN  — https://vercel.com/account/tokens
 #

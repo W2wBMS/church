@@ -1,6 +1,6 @@
 // Church 2.0 — runtime configuration.
 //
-// Local development talks to the local PostgreSQL-backed API by default.
+// Local development talks to the local API (which connects to Supabase) by default.
 // Deployed frontends use the configured API origin from localStorage.
 const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 window.CHURCH2_CONFIG = {

@@ -1,5 +1,5 @@
 # Backend + infra live in the repo but are NOT part of the Vercel static deploy.
-server/
+backend/
 deploy/
 node_modules/
 .github/

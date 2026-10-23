@@ -1,5 +1,8 @@
 
 # Backend
+backend/node_modules/
+backend/.env
+backend/*.log
+
+# Leftover local dependency cache from the previous server/ layout
 server/node_modules/
-server/.env
-server/*.log

@@ -1,11 +1,11 @@
 {
   "name": "church2-platform",
   "version": "1.0.0",
-  "description": "Unified Multi-Branch Church Management Platform with AI-Driven Ministry Intelligence",
-  "main": "app.js",
+  "description": "Church 2.0 frontend and backend workspace",
+  "main": "frontend/app.js",
   "scripts": {
     "test": "node test.js",
-    "start": "npx http-server"
+    "start": "npx http-server frontend"
   },
   "keywords": [
     "church",

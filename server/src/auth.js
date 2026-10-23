@@ -12,7 +12,7 @@ export function signToken(user, tokenVersion) {
   return jwt.sign(
     {
       sub: user.id, email: user.email, role: user.role,
-      branchId: user.branch_id, name: user.name,
+      branchId: user.branch_id, memberId: user.member_id || null, name: user.name,
       tv: tokenVersion === undefined ? (user.token_version || 0) : tokenVersion,
     },
     config.jwtSecret,
@@ -50,7 +50,10 @@ export async function authenticate(req, res, next) {
   }
 
   try {
-    const { rows } = await query('SELECT token_version FROM users WHERE id = $1', [claims.sub]);
+    const { rows } = await query(
+      'SELECT token_version, email, name, role, branch_id, member_id FROM users WHERE id = $1',
+      [claims.sub]
+    );
     if (!rows[0]) return res.status(401).json({ error: 'Account no longer exists' });
     if ((claims.tv || 0) !== rows[0].token_version) {
       // Signature is valid but a newer session has superseded this one.
@@ -59,11 +62,24 @@ export async function authenticate(req, res, next) {
         code: 'session_superseded',
       });
     }
+    if (claims.email !== rows[0].email || claims.role !== rows[0].role || claims.branchId !== rows[0].branch_id) {
+      return res.status(401).json({ error: 'Session is no longer valid; please sign in again.' });
+    }
+    if (rows[0].role !== 'hq_admin' && !rows[0].branch_id) {
+      return res.status(403).json({ error: 'This account must be assigned to a campus before it can access the API.' });
+    }
+    req.user = {
+      ...claims,
+      email: rows[0].email,
+      name: rows[0].name,
+      role: rows[0].role,
+      branchId: rows[0].branch_id,
+      memberId: rows[0].member_id,
+    };
   } catch (e) {
     return next(e);
   }
 
-  req.user = claims;
   next();
 }
 
@@ -85,4 +101,9 @@ export function resolveScope(req) {
     return target;
   }
   return req.user.branchId; // locked to own campus
+}
+
+// Check that a record belongs to the caller's branch. HQ may access any branch.
+export function canAccessBranch(req, branchId) {
+  return req.user.role === 'hq_admin' || req.user.branchId === branchId;
 }

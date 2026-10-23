@@ -126,5 +126,5 @@ jobs:
             echo "This build: ${{ steps.deploy.outputs.url }}"
             echo ""
             echo "To see the login flow instead, drop \`?preview\` and sign in with"
-            echo "\`admin@maximummiracle.org\` / \`grace\`, MFA code \`123456\`."
+            echo "\`admin@chritianmissiondunamis.org\` / \`grace\`, MFA code \`123456\`."
           } >> "$GITHUB_STEP_SUMMARY"

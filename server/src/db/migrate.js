@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { pool } from './pool.js';
 
 // Applies schema.sql. The schema is idempotent (IF NOT EXISTS), so this doubles
@@ -14,7 +14,7 @@ export async function migrate() {
 }
 
 // Allow `npm run migrate`
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
   migrate()
     .then(() => pool.end())
     .catch((e) => {

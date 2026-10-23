@@ -1,191 +1,166 @@
-# API Documentation
-## Church 2.0 Integration & REST API v1.0
+# Church 2.0 API
 
-This document defines the REST API endpoints and data payloads required for integrating external accounting software (e.g., QuickBooks), payment gateways (e.g., Stripe, M-Pesa), bulk SMS providers, and external mobile applications.
+The backend is an Express API backed by PostgreSQL. All routes use the `/api` prefix. The API listens on port `4000` by default; configure `PORT`, database settings, and allowed production origins in the server environment.
 
----
+## Authentication
 
-### 1. Authentication
-
-All requests must contain a valid Bearer token in the `Authorization` header.
+Except for `GET /health` and the authentication endpoints, requests require a bearer token:
 
 ```http
-Authorization: Bearer <access_token>
+Authorization: Bearer <token>
 ```
 
-#### 1.1 Sign In
-* **Endpoint**: `POST /api/v1/auth/login`
-* **Request Payload**:
+### `POST /auth/signup`
+
+Creates a member account and linked member profile. Public registration can only assign the `member` role.
+
 ```json
 {
-  "email": "admin@maximummiracle.org",
-  "password": "securepassword123"
+  "email": "member@example.org",
+  "password": "a-password-of-at-least-12-characters",
+  "firstName": "Ama",
+  "lastName": "Mensah",
+  "phone": "+233200000000",
+  "branchId": "b1"
 }
 ```
-* **Response Payload (MFA Required)**:
+
+### `POST /auth/login`
+
+Accepts `{ "email": "...", "password": "..." }`. Returns a token and user when MFA is disabled, or `{ "mfaRequired": true, "ticket": "..." }` when it is enabled.
+
+### `POST /auth/mfa`
+
+Accepts `{ "ticket": "...", "code": "..." }` and returns `{ "token": "...", "user": {...} }`. The current MFA verifier is a development/demo code, not a production TOTP or SMS provider. Do not treat it as production-ready MFA.
+
+### `GET /auth/me`
+
+Returns the authenticated user identity.
+
+## Campus scope and roles
+
+- HQ administrators can access all campuses or select one with `?branch=b1`; `?branch=global` requests all campuses.
+- Branch administrators and ministry leaders are locked to their assigned campus. A `branch` query or body value cannot grant access to another campus.
+- Members are restricted to their linked profile and campus.
+- Only HQ administrators can assign the `branch_admin` role.
+
+The canonical campus IDs provisioned by the schema are `b1` (Accra Main), `b2` (Kumasi Branch), and `b3` (Takoradi Branch).
+
+## Routes
+
+| Method | Route | Access | Behavior |
+|---|---|---|---|
+| `GET` | `/health` | Public | Reports API and PostgreSQL health. |
+| `GET` | `/members` | Authenticated | Lists members in permitted scope; optional `search` parameter. Members only receive their own record. |
+| `GET` | `/members/:id` | Authenticated | Returns a scoped member profile. |
+| `PATCH` | `/members/:id/milestones` | HQ/branch admin | Replaces the member's spiritual milestone list (up to 100 entries) in permitted scope. |
+| `POST` | `/members` | HQ/branch admin | Creates a member, optional campus group assignments, and optional login account in one transaction. |
+| `POST` | `/members/import` | HQ/branch admin | Imports 1–500 validated member records at a time, returning created records and row-level validation errors. |
+| `DELETE` | `/members/:id` | HQ/branch admin | Removes the member, linked login, attendance, and group assignments; financial records remain. |
+| `GET` | `/transactions` | Authenticated | Lists transactions in scope; members only see their own. |
+| `POST` | `/transactions` | Authenticated | Records a valid contribution. Members may record only their own contributions. |
+| `DELETE` | `/transactions/:id` | HQ/branch admin | Permanently removes a transaction in permitted scope. |
+| `GET` | `/collection-sessions` | HQ/branch admin | Lists saved collection sessions in scope. |
+| `POST` | `/collection-sessions` | HQ/branch admin | Records offering, tithe, and other amounts; total is calculated by PostgreSQL. |
+| `DELETE` | `/collection-sessions/:id` | HQ/branch admin | Permanently removes a collection session in permitted scope. |
+| `GET` | `/attendance` | Authenticated | Lists individual check-ins in scope; members only see their own. |
+| `PUT` | `/attendance` | HQ/branch admin/ministry leader | Creates or updates a member check-in. Requires a valid `YYYY-MM-DD` date and boolean `present`. |
+| `DELETE` | `/attendance/:memberId/:date` | HQ/branch admin/ministry leader | Removes a member check-in in permitted scope. |
+| `GET` | `/attendance/headcounts` | HQ/branch admin/ministry leader | Lists service headcounts in scope. |
+| `PUT` | `/attendance/headcount` | HQ/branch admin | Creates or updates a total for a campus and service date. |
+| `DELETE` | `/attendance/headcounts/:id` | HQ/branch admin | Permanently removes a service headcount in permitted scope. |
+| `GET` | `/dashboard/summary` | Authenticated | Returns summary metrics calculated from persisted records. |
+| `GET` | `/groups` | Authenticated | Lists groups in scope. |
+| `POST` | `/groups` | HQ/branch admin/ministry leader | Creates a campus group. |
+| `DELETE` | `/groups/:id` | HQ/branch admin/ministry leader | Removes a group in permitted scope. |
+| `DELETE` | `/groups/:id/members/:memberId` | HQ/branch admin/ministry leader | Removes a member's group assignment without deleting their profile. |
+| `POST` | `/groups/:id/toggle-member` | Authenticated | Adds/removes a same-campus member; a member account can only change its own assignment. |
+| `GET` | `/followups` | Authenticated | Lists guest follow-ups in scope. |
+| `POST` | `/followups` | HQ/branch admin/ministry leader | Adds a guest to the follow-up pipeline. |
+| `PATCH` | `/followups/:id` | HQ/branch admin/ministry leader | Moves a guest through `New Guest`, `Contacted`, `Connected`, or `Member`. |
+| `DELETE` | `/followups/:id` | HQ/branch admin/ministry leader | Removes a guest follow-up in permitted scope. |
+| `GET` | `/announcements` | Authenticated | Lists global and applicable campus announcements. |
+| `POST` | `/announcements` | HQ/branch admin | Stores a broadcast record and calculates recipients. Branch admins are restricted to their campus. |
+| `DELETE` | `/announcements/:id` | HQ/branch admin | Removes a permitted broadcast record from history; it cannot recall messages already sent. |
+| `GET` | `/prayer-requests` | Authenticated | Lists requests in scope; members only see their own requests. |
+| `POST` | `/prayer-requests` | Authenticated | Saves a request using the member's verified identity and campus when linked. |
+| `DELETE` | `/prayer-requests/:id` | HQ/branch admin/ministry leader | Removes a request in permitted scope. |
+| `GET` | `/events` | Authenticated | Lists events in scope. |
+| `POST` | `/events` | HQ/branch admin/ministry leader | Creates a dated event with optional description, time, and unique volunteer roles. |
+| `PATCH` | `/events/:id` | HQ/branch admin/ministry leader | Updates event details and volunteer roles in permitted scope. |
+| `DELETE` | `/events/:id` | HQ/branch admin/ministry leader | Removes an event in permitted scope. |
+| `DELETE` | `/events/:id/volunteer/:memberId` | HQ/branch admin/ministry leader | Removes a member's volunteer assignment from an event in permitted scope. |
+| `POST` | `/events/:id/rsvp` | Authenticated | Registers the linked member or an authorized same-campus member for an event. |
+| `POST` | `/events/:id/volunteer` | Authenticated | Adds the member to an event's listed volunteer role and signup list. |
+| `GET` | `/campaigns` | HQ/branch admin | Lists global and campus campaigns in permitted scope. |
+| `POST` | `/campaigns` | HQ/branch admin | Creates a campaign with a goal, raised offset, fund category, and optional campus. |
+| `PATCH` | `/campaigns/:id` | HQ/branch admin | Updates campaign details in permitted scope. |
+| `DELETE` | `/campaigns/:id` | HQ/branch admin | Removes a campaign in permitted scope. |
+| `GET` | `/recurring-gifts` | HQ/branch admin | Lists recurring giving schedules in permitted scope. |
+| `POST` | `/recurring-gifts` | HQ/branch admin | Creates a schedule for a campus member or named donor. |
+| `PATCH` | `/recurring-gifts/:id` | HQ/branch admin | Updates amount, donor, cadence, payment method, next date, or active state. |
+| `DELETE` | `/recurring-gifts/:id` | HQ/branch admin | Removes a recurring giving schedule in permitted scope. |
+
+## Examples
+
+### Create a member with a group and optional system account
+
+Omit `account` when the person does not need to sign in. When creating an account, provide a valid email and a temporary password with at least 12 characters.
+
 ```json
 {
-  "status": "mfa_required",
-  "mfa_token": "mfa_temp_token_abc123",
-  "method": "authenticator_app"
-}
-```
-* **Verify MFA**: `POST /api/v1/auth/mfa/verify`
-  - Payload: `{"mfa_token": "mfa_temp_token_abc123", "code": "123456"}`
-  - Response: `{"access_token": "jwt_token_here", "expires_in": 3600}`
-
----
-
-### 2. Branch Management
-
-#### 2.1 Get All Branches
-* **Endpoint**: `GET /api/v1/branches`
-* **Response Payload**:
-```json
-[
-  {
-    "id": "b1111111-1111-1111-1111-111111111111",
-    "name": "Nairobi CBD",
-    "location": "HQ Center, Nairobi",
-    "member_count": 1240,
-    "created_at": "2024-01-15T08:00:00Z"
-  },
-  {
-    "id": "b2222222-2222-2222-2222-222222222222",
-    "name": "Kawangware",
-    "location": "Kawangware, Nairobi",
-    "member_count": 450,
-    "created_at": "2024-06-10T10:30:00Z"
+  "firstName": "Ama",
+  "lastName": "Mensah",
+  "email": "ama@example.org",
+  "phone": "+233200000000",
+  "branchId": "b1",
+  "groupIds": ["g_abc123"],
+  "account": {
+    "role": "ministry_leader",
+    "password": "temporary-password-12"
   }
-]
-```
-
-#### 2.2 Create New Branch (HQ Only)
-* **Endpoint**: `POST /api/v1/branches`
-* **Request Payload**:
-```json
-{
-  "name": "Nakuru",
-  "location": "Hyde Park Corner, London"
-}
-```
-* **Response**: `201 Created` with branch object.
-
----
-
-### 3. Membership Directory
-
-#### 3.1 List Members (Paginated & Filterable)
-* **Endpoint**: `GET /api/v1/members?branch_id=b2222222-2222-2222-2222-222222222222&query=Smith&limit=20`
-* **Response Payload**:
-```json
-{
-  "data": [
-    {
-      "id": "m9999999-9999-9999-9999-999999999999",
-      "first_name": "John",
-      "last_name": "Smith",
-      "email": "john.smith@email.com",
-      "phone": "+15550199",
-      "family_id": "f5555555-5555-5555-5555-555555555555",
-      "spiritual_milestones": ["Baptized: 2024-05-12"],
-      "engagement_score": 85
-    }
-  ],
-  "pagination": {
-    "total": 1,
-    "limit": 20,
-    "page": 1
-  }
 }
 ```
 
-#### 3.2 Create Member
-* **Endpoint**: `POST /api/v1/members`
-* **Request Payload**:
+Supported account roles: `member`, `ministry_leader`, and `branch_admin`. Only HQ administrators can grant `branch_admin`.
+
+### Import members from CSV
+
+`POST /members/import` accepts `branchId` and a `members` array of up to 500 records with `firstName`, `lastName`, optional `email`, `phone`, `volunteer_skills`, same-campus `groupIds`, `maritalStatus`, `background`, and `expectations`. The request body limit is 8 MB for this endpoint. The server enforces the caller's campus scope, skips duplicate email addresses at that campus, and returns created members plus row-level errors. CSV imports do not create login accounts.
+
+The directory's downloadable CSV template includes a `groups` column; put exact campus group names there, separated by semicolons. Group names are matched without regard to case and must be unique at the selected campus. Login accounts and system roles are not created by CSV import.
+
+### Create an event
+
+`POST /events` accepts a title, required service date, optional 24-hour `time`, description, and unique `rolesRequired` list. Branch scope is enforced by the server. Event updates use `PATCH /events/:id`.
+
+### Create a campaign
+
+`POST /campaigns` accepts `name`, optional non-negative `goal` and `raisedOffset`, optional `fundCategory`, and an optional `branchId`. HQ-created campaigns without a campus are global. Branch administrators can only create campaigns for their own campus.
+
+### Create a recurring gift schedule
+
+`POST /recurring-gifts` accepts either a same-campus `memberId` or `memberName`, a positive `amount`, `frequency` (`weekly`, `biweekly`, `monthly`, `quarterly`, or `annually`), and optional `category`, `method`, `nextDate`, and `active` fields.
+
+### Record a daily collection
+
+`POST /collection-sessions` accepts `sessionName`, `date`, `branchId`, `offeringAmount`, `titheAmount`, and `otherAmount`. Amounts must be non-negative, have at most two decimal places, and sum to more than zero.
+
+### Record total attendance
+
+`PUT /attendance/headcount` accepts:
+
 ```json
 {
-  "branch_id": "b2222222-2222-2222-2222-222222222222",
-  "first_name": "Sarah",
-  "last_name": "Smith",
-  "email": "sarah.smith@email.com",
-  "phone": "+15550200",
-  "family_id": "f5555555-5555-5555-5555-555555555555"
+  "date": "2026-10-18",
+  "branchId": "b1",
+  "totalPresent": 150
 }
 ```
 
----
+Saving the same campus and date again updates that total.
 
-### 4. Financial Ledger
+## Current integration boundaries
 
-#### 4.1 Record Financial Transaction
-* **Endpoint**: `POST /api/v1/financials/transactions`
-* **Request Payload**:
-```json
-{
-  "branch_id": "b2222222-2222-2222-2222-222222222222",
-  "member_id": "m9999999-9999-9999-9999-999999999999",
-  "amount": 250.00,
-  "category": "Tithe",
-  "payment_method": "Credit Card"
-}
-```
-* **Response Payload**:
-```json
-{
-  "transaction_id": "t8888888-8888-8888-8888-888888888888",
-  "receipt_number": "REC-2026-10294",
-  "receipt_url": "https://api.maximummiracle.org/receipts/REC-2026-10294.pdf",
-  "status": "Success"
-}
-```
-
----
-
-### 5. AI Services
-
-#### 5.1 Categorize Prayer Request
-* **Endpoint**: `POST /api/v1/ai/prayer/categorize`
-* **Request Payload**:
-```json
-{
-  "text": "My grandmother is currently in the hospital battling severe pneumonia. Please pray for her recovery and strength for our family."
-}
-```
-* **Response Payload**:
-```json
-{
-  "category": "Healing",
-  "confidence": 0.98,
-  "action_route": "Counseling & Care Department",
-  "tags": ["hospital", "pneumonia", "recovery"]
-}
-```
-
-#### 5.2 Repurpose Sermon
-* **Endpoint**: `POST /api/v1/ai/sermon/repurpose`
-* **Request Payload**:
-```json
-{
-  "title": "The Power of Faithful Giving",
-  "transcript": "When we look at giving, it is not merely about money. It is an act of trust. In Malachi, we see that trust is tested..."
-}
-```
-* **Response Payload**:
-```json
-{
-  "devotional": {
-    "day1": "Reflecting on Trust: Giving is a spiritual index...",
-    "day2": "Testing the Windows of Heaven...",
-    "day3": "Communities Sustained by Generosity..."
-  },
-  "social_media_quotes": [
-    "\"Giving is not merely about money. It is an act of trust.\"",
-    "\"Trust is tested in our stewardship and proven in our community.\""
-  ],
-  "discussion_questions": [
-    "What does trust mean to you when it comes to financial stewardship?",
-    "How have you experienced community support in times of testing?"
-  ]
-}
-```
+- Announcement endpoints persist broadcast records and recipient counts. They do not yet deliver SMS, email, or push messages; provider integrations must be configured before describing a message as sent.
+- Announcement endpoints persist broadcast records and recipient counts. They do not deliver SMS, email, or push messages; provider integrations must be configured before describing a message as sent.

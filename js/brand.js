@@ -1,11 +1,11 @@
 /**
- * Maximum Miracle Centre — brand configuration.
+ * Christian Mission Dunamis — brand configuration.
  *
  * This is the SINGLE place to change org identity, palette, currency and
  * campuses. Nothing else in the app hardcodes the client's name or colours;
  * the CSS reads the same palette from the tokens in styles.css :root.
  *
- * PALETTE NOTE: the hex values below are a considered match for MMC's
+ * PALETTE NOTE: the hex values below are a considered match for CMD's
  * royal-blue-and-gold identity, set from public brand material. If the church
  * supplies exact brand hex codes, change them here and in the matching
  * `--mmc-*` tokens at the top of styles.css — nothing else needs to move.
@@ -13,11 +13,11 @@
 (function () {
     const Brand = {
         // ---- Identity -------------------------------------------------------
-        name: 'Maximum Miracle Centre',
-        shortName: 'MMC',
-        tagline: 'Reaching the lost, restoring the broken',
-        established: 1995,
-        website: 'https://maximummiracle.org',
+        name: 'Christian Mission Dunamis',
+        shortName: 'CMD',
+        tagline: 'DUNAMIS, POWER!',
+        established: 2000,
+        website: 'https://christianmissiondunamis.org',
 
         // ---- Palette (mirrors the --mmc-* tokens in styles.css) -------------
         palette: {
@@ -30,23 +30,23 @@
         },
 
         // ---- Money ----------------------------------------------------------
-        // Kenya Shilling. Rendered as "Ksh 12,500" — no decimals for whole
-        // shillings, which is how Kenyan churches actually report giving.
-        currency: { code: 'KES', symbol: 'Ksh', locale: 'en-KE' },
+        // Ghana Cedis. Rendered as "₵ 12,500" — no decimals for whole
+        // cedis, which is how Ghanaian churches actually report giving.
+        currency: { code: 'GHS', symbol: '₵', locale: 'en-GH' },
 
-        /** Format an amount as Kenyan Shillings. */
+        /** Format an amount as Ghana Cedis. */
         money(amount, opts) {
             const n = Number(amount) || 0;
             const decimals = (opts && opts.decimals !== undefined)
                 ? opts.decimals
                 : (Number.isInteger(n) ? 0 : 2);
-            return `${this.currency.symbol} ${n.toLocaleString('en-KE', {
+            return `${this.currency.symbol} ${n.toLocaleString('en-GH', {
                 minimumFractionDigits: decimals,
                 maximumFractionDigits: decimals
             })}`;
         },
 
-        /** Compact form for chart axes and tight stat cards: "Ksh 1.2M". */
+        /** Compact form for chart axes and tight stat cards: "₵ 1.2M". */
         moneyShort(amount) {
             const n = Number(amount) || 0;
             if (Math.abs(n) >= 1e6) return `${this.currency.symbol} ${(n / 1e6).toFixed(1)}M`;
@@ -55,28 +55,27 @@
         },
 
         // ---- Giving channels ------------------------------------------------
-        // M-Pesa is the dominant giving rail in Kenya, so it leads and is the
-        // default. Paybill/account are placeholders until the church supplies
-        // their live short code.
+        // Bank Transfer and Mobile Money are the dominant giving rails in Ghana.
+        // Update bank details and mobile money numbers when available.
         giving: {
-            methods: ['M-Pesa', 'Bank Transfer', 'Cash', 'Card'],
-            defaultMethod: 'M-Pesa',
-            mpesa: { paybill: '891300', accountName: 'MMC', shortCodeConfirmed: false },
-            // M-Pesa paybill charges are borne by the payer per Safaricom's
-            // tariff band; card is the only rail with a percentage fee.
-            fees: { mpesaFlat: 0, cardPercent: 0.029, cardFlat: 30 }
+            methods: ['Bank Transfer', 'Mobile Money', 'Cash', 'Card'],
+            defaultMethod: 'Mobile Money',
+            mobileMoney: { provider: 'MTN', number: '+233XXXXXXXXX', accountName: 'CMD', shortCodeConfirmed: false },
+            // Mobile money and bank transfer charges should be verified with your
+            // financial institution; card is the only rail with a percentage fee.
+            fees: { mobileMoneyFlat: 0, cardPercent: 0.029, cardFlat: 0 }
         },
 
         // ---- Campuses -------------------------------------------------------
-        // Real MMC locations. `id` values stay b1/b2/b3 so existing saved data
+        // CMD branch locations. `id` values stay b1/b2/b3 so existing saved data
         // and the seeded database keep working.
         campuses: [
-            { id: 'b1', name: 'Nairobi CBD', code: 'NRB', hq: true,
-              location: 'Embassy Cinema, Latema Road, off Tom Mboya Street, Nairobi' },
-            { id: 'b2', name: 'Kawangware', code: 'KWG', hq: false,
-              location: 'Kawangware, Nairobi' },
-            { id: 'b3', name: 'Nakuru', code: 'NKR', hq: false,
-              location: 'Langa Langa, Kanu Street, Nakuru' }
+            { id: 'b1', name: 'Accra Main', code: 'ACC', hq: true,
+              location: 'Accra, Ghana' },
+            { id: 'b2', name: 'Kumasi Branch', code: 'KUM', hq: false,
+              location: 'Kumasi, Ghana' },
+            { id: 'b3', name: 'Takoradi Branch', code: 'TAK', hq: false,
+              location: 'Takoradi, Ghana' }
         ],
 
         /** Campus display name for an id, with a safe fallback. */
@@ -96,7 +95,8 @@
         ]
     };
 
-    window.MMC_BRAND = Brand;
+    window.CMD_BRAND = Brand;
+    window.MMC_BRAND = Brand; // Legacy alias for compatibility
     // Short alias used throughout the app for money formatting.
     window.money = (amount, opts) => Brand.money(amount, opts);
 })();

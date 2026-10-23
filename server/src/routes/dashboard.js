@@ -8,13 +8,19 @@ const router = Router();
 // Scoped dashboard metrics, all derived from real records (no fabricated data).
 router.get('/summary', wrap(async (req, res) => {
   const scope = resolveScope(req);
-  const bp = scope ? [scope] : [];
-  const bw = scope ? 'WHERE branch_id = $1' : '';
+  const params = [];
+  const filters = [];
+  if (scope) { params.push(scope); filters.push(`branch_id = $${params.length}`); }
+  if (req.user.role === 'member') { params.push(req.user.memberId || ''); filters.push(`member_id = $${params.length}`); }
+  const bp = params;
+  const bw = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
 
   const [tx, att, members] = await Promise.all([
     query(`SELECT amount, date, category, member_id FROM transactions ${bw}`, bp),
     query(`SELECT service_date, present, member_id FROM attendance ${bw}`, bp),
-    query(`SELECT id FROM members ${bw}`, bp),
+    query(req.user.role === 'member'
+      ? 'SELECT id FROM members WHERE id = $1'
+      : `SELECT id FROM members ${scope ? `WHERE branch_id = $1` : ''}`, req.user.role === 'member' ? [req.user.memberId || ''] : (scope ? [scope] : [])),
   ]);
 
   const now = Date.now();

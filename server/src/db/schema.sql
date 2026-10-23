@@ -9,6 +9,14 @@ CREATE TABLE IF NOT EXISTS branches (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Canonical campuses are required for account provisioning and scoped records.
+-- Preserve any existing branch edits when applying this migration again.
+INSERT INTO branches (id, name, location, code) VALUES
+  ('b1', 'Accra Main', 'Accra, Ghana', 'ACC'),
+  ('b2', 'Kumasi Branch', 'Kumasi, Ghana', 'KUM'),
+  ('b3', 'Takoradi Branch', 'Takoradi, Ghana', 'TAK')
+ON CONFLICT (id) DO NOTHING;
+
 -- Auth accounts. Roles gate access; branch_id scopes non-HQ users to a campus.
 CREATE TABLE IF NOT EXISTS users (
   id            SERIAL PRIMARY KEY,
@@ -37,6 +45,10 @@ CREATE TABLE IF NOT EXISTS members (
 );
 CREATE INDEX IF NOT EXISTS idx_members_branch ON members(branch_id);
 
+-- Links a login account to its own member profile for ownership checks.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS member_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_member ON users(member_id) WHERE member_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS transactions (
   id             TEXT PRIMARY KEY,
   branch_id      TEXT NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
@@ -52,6 +64,21 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_tx_branch ON transactions(branch_id);
 CREATE INDEX IF NOT EXISTS idx_tx_member ON transactions(member_id);
 
+CREATE TABLE IF NOT EXISTS collection_sessions (
+  id              TEXT PRIMARY KEY,
+  branch_id       TEXT NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+  session_name    TEXT NOT NULL,
+  collection_date DATE NOT NULL,
+  offering_amount NUMERIC(12,2) NOT NULL CHECK (offering_amount >= 0),
+  tithe_amount    NUMERIC(12,2) NOT NULL CHECK (tithe_amount >= 0),
+  other_amount    NUMERIC(12,2) NOT NULL CHECK (other_amount >= 0),
+  total_amount    NUMERIC(12,2) GENERATED ALWAYS AS (offering_amount + tithe_amount + other_amount) STORED,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (offering_amount + tithe_amount + other_amount > 0)
+);
+CREATE INDEX IF NOT EXISTS idx_collection_sessions_branch_date
+  ON collection_sessions(branch_id, collection_date DESC);
+
 CREATE TABLE IF NOT EXISTS attendance (
   id           TEXT PRIMARY KEY,
   member_id    TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
@@ -61,6 +88,18 @@ CREATE TABLE IF NOT EXISTS attendance (
   UNIQUE (member_id, service_date)
 );
 CREATE INDEX IF NOT EXISTS idx_att_branch ON attendance(branch_id);
+
+CREATE TABLE IF NOT EXISTS attendance_headcounts (
+  id           TEXT PRIMARY KEY,
+  branch_id    TEXT NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+  service_date DATE NOT NULL,
+  total_present INTEGER NOT NULL CHECK (total_present BETWEEN 0 AND 1000000),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (branch_id, service_date)
+);
+CREATE INDEX IF NOT EXISTS idx_attendance_headcounts_branch_date
+  ON attendance_headcounts(branch_id, service_date DESC);
 
 CREATE TABLE IF NOT EXISTS events (
   id                  TEXT PRIMARY KEY,

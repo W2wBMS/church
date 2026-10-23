@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^& 'C:\\\\Users\\\\Hp\\\\\\.agents\\\\skills\\\\impeccable\\\\scripts\\\\impeccable\\.cmd' context --target styles\\.css$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

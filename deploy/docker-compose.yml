@@ -2,7 +2,6 @@
 # Usage (on the Contabo host):
 #   cp .env.example .env   # fill in secrets
 #   docker compose up -d --build
-#   docker compose exec api node src/db/seed.js   # first-time seed only
 #
 # nginx terminates TLS with certs from certbot (see DEPLOY.md) and proxies
 # /api to the API container. The static frontend is served by Vercel, so this

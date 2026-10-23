@@ -9,6 +9,9 @@ export const pool = new pg.Pool(
     ? {
         connectionString: config.databaseUrl,
         ssl: process.env.PGSSL === 'require' ? { rejectUnauthorized: false } : undefined,
+        max: 10,
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: 5_000,
       }
     : {
         host: config.pg.host,
@@ -16,6 +19,9 @@ export const pool = new pg.Pool(
         user: config.pg.user,
         password: config.pg.password,
         database: config.pg.database,
+        max: 10,
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: 5_000,
       }
 );
 
@@ -30,7 +36,11 @@ export async function withTransaction(fn) {
     await client.query('COMMIT');
     return result;
   } catch (e) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Database rollback failed:', rollbackError);
+    }
     throw e;
   } finally {
     client.release();

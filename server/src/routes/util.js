@@ -3,6 +3,11 @@ import crypto from 'node:crypto';
 // Prefix + short random id, stable and URL-safe.
 export const genId = (prefix) => `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
 
+export const isDateOnly = (value) => typeof value === 'string'
+  && /^\d{4}-\d{2}-\d{2}$/.test(value)
+  && !Number.isNaN(Date.parse(`${value}T00:00:00Z`))
+  && new Date(`${value}T00:00:00Z`).toISOString().startsWith(value);
+
 // Row mappers: DB snake_case -> API camelCase (matches the frontend's shapes).
 export const mapMember = (r) => ({
   id: r.id, branchId: r.branch_id, firstName: r.first_name, lastName: r.last_name,

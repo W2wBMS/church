@@ -1,4 +1,4 @@
-// Maximum Miracle Centre — main application controller
+// Christian Mission Dunamis — main application controller
 // Handles global state, CRUD operations, rendering, and Chart.js visualization
 
 // ---- Rendering helpers -------------------------------------------------------
@@ -44,36 +44,88 @@ function renderMarkdown(text) {
     return html;
 }
 
+function parseCsvRecords(text) {
+    const records = [];
+    let record = [];
+    let field = '';
+    let quoted = false;
+    let closedQuote = false;
+
+    for (let index = 0; index < text.length; index++) {
+        const char = text[index];
+        if (quoted) {
+            if (char === '"' && text[index + 1] === '"') {
+                field += '"';
+                index++;
+            } else if (char === '"') {
+                quoted = false;
+                closedQuote = true;
+            } else {
+                field += char;
+            }
+        } else if (closedQuote && char !== ',' && char !== '\r' && char !== '\n' && !/\s/.test(char)) {
+            throw new Error('A quoted field has extra text after its closing quote.');
+        } else if (char === '"' && !field.length) {
+            quoted = true;
+            closedQuote = false;
+        } else if (char === '"') {
+            throw new Error('A quote appears inside an unquoted CSV field.');
+        } else if (char === ',') {
+            record.push(field);
+            field = '';
+            closedQuote = false;
+        } else if (char === '\r' || char === '\n') {
+            if (char === '\r' && text[index + 1] === '\n') index++;
+            record.push(field);
+            if (record.some((value) => value.trim())) records.push(record);
+            record = [];
+            field = '';
+            closedQuote = false;
+        } else if (!closedQuote) {
+            field += char;
+        }
+    }
+
+    if (quoted) throw new Error('The CSV ends inside a quoted field.');
+    record.push(field);
+    if (record.some((value) => value.trim())) records.push(record);
+    return records;
+}
+
 // Initialize Global State
 const ChurchApp = {
+    memberImportState: null,
+
     // 1. Centralized Mock Database
     db: {
         branches: [
-            { id: 'b1', name: 'Nairobi CBD', location: 'Embassy Cinema, Latema Road, off Tom Mboya Street, Nairobi', code: 'NRB' },
-            { id: 'b2', name: 'Kawangware', location: 'Kawangware, Nairobi', code: 'KWG' },
-            { id: 'b3', name: 'Nakuru', location: 'Langa Langa, Kanu Street, Nakuru', code: 'NKR' }
+            { id: 'b1', name: 'Accra Main', location: 'Central Accra, Ghana', code: 'ACC' },
+            { id: 'b2', name: 'Kumasi Branch', location: 'Kumasi, Ghana', code: 'KUM' },
+            { id: 'b3', name: 'Takoradi Branch', location: 'Takoradi, Ghana', code: 'TAK' }
         ],
         members: [
-            { id: 'm1', branchId: 'b1', branchName: 'Nairobi CBD', firstName: 'John', lastName: 'Kamau', email: 'john.kamau@maximummiracle.org', phone: '+254712345678', familyId: 'fam_kamau', familyRole: 'Husband', spiritualMilestones: ['Baptized: 2018-04-12', 'Member: 2019-01-01'], volunteer_skills: ['Worship Vocals', 'Keyboard', 'Guitar'], engagement_score: 95, maritalStatus: 'Married', background: 'Led worship at a fellowship in Thika for six years; works as a sound technician in the CBD.', expectations: 'To grow the worship team and mentor younger musicians.' },
-            { id: 'm2', branchId: 'b1', branchName: 'Nairobi CBD', firstName: 'Mary', lastName: 'Kamau', email: 'mary.kamau@maximummiracle.org', phone: '+254722345678', familyId: 'fam_kamau', familyRole: 'Wife', spiritualMilestones: ['Baptized: 2019-06-20'], volunteer_skills: ['Childcare', 'Greeting'], engagement_score: 88, maritalStatus: 'Married', background: "Primary school teacher; ran a children's holiday programme before joining.", expectations: "To help build up the children's ministry." },
-            { id: 'm3', branchId: 'b1', branchName: 'Nairobi CBD', firstName: 'David', lastName: 'Onyango', email: 'david.onyango@email.com', phone: '+254733333333', familyId: 'fam_onyango', familyRole: 'Single', spiritualMilestones: ['Member: 2021-03-10'], volunteer_skills: ['Ushering', 'Security', 'First Aid'], engagement_score: 75 },
-            { id: 'm4', branchId: 'b1', branchName: 'Nairobi CBD', firstName: 'Grace', lastName: 'Mwangi', email: 'grace.m@email.com', phone: '+254744444444', familyId: 'fam_mwangi', familyRole: 'Single', spiritualMilestones: ['Baptized: 2022-11-05'], volunteer_skills: ['Ushering', 'Greeting'], engagement_score: 62 },
-            { id: 'm5', branchId: 'b2', branchName: 'Kawangware', firstName: 'Samuel', lastName: 'Kariuki', email: 'samuel.kariuki@email.com', phone: '+254701223344', familyId: 'fam_kariuki', familyRole: 'Husband', spiritualMilestones: ['Member: 2015-05-24'], volunteer_skills: ['Sound Engineering', 'Video Editing'], engagement_score: 92 },
-            { id: 'm6', branchId: 'b2', branchName: 'Kawangware', firstName: 'Esther', lastName: 'Kariuki', email: 'esther.kariuki@email.com', phone: '+254701223355', familyId: 'fam_kariuki', familyRole: 'Wife', spiritualMilestones: ['Member: 2015-05-24'], volunteer_skills: ['Worship Vocals', 'Public Speaking'], engagement_score: 78 },
-            { id: 'm7', branchId: 'b2', branchName: 'Kawangware', firstName: 'Faith', lastName: 'Wanjiku', email: 'faith.wanjiku@email.com', phone: '+254702334455', familyId: 'fam_wanjiku', familyRole: 'Single', spiritualMilestones: ['Baptized: 2024-02-14'], volunteer_skills: ['Greeting', 'Social Media'], engagement_score: 41, maritalStatus: 'Single', background: 'Recent graduate, works in a salon in Kawangware. New to church life.', expectations: 'To find community and a small group close to home.' }, // Flagged at risk
-            { id: 'm8', branchId: 'b3', branchName: 'Nakuru', firstName: 'Peter', lastName: 'Kiprono', email: 'peter.kiprono@email.com', phone: '+254703445566', familyId: 'fam_kiprono', familyRole: 'Single', spiritualMilestones: ['Member: 2023-09-12'], volunteer_skills: ['Graphics', 'Video Editing', 'Website Support'], engagement_score: 84 },
-            { id: 'm9', branchId: 'b3', branchName: 'Nakuru', firstName: 'Alice', lastName: 'Chebet', email: 'alice.chebet@email.com', phone: '+254704556677', familyId: 'fam_chebet', familyRole: 'Single', spiritualMilestones: [], volunteer_skills: ['Greeting', 'First Aid'], engagement_score: 35 }, // Flagged at risk
-            { id: 'm10', branchId: 'b1', branchName: 'Nairobi CBD', firstName: 'Kennedy', lastName: 'Otieno', email: 'kennedy.o@email.com', phone: '+254755555555', familyId: 'fam_otieno', familyRole: 'Husband', spiritualMilestones: ['Baptized: 2010-08-15'], volunteer_skills: ['Youth Mentorship', 'Security'], engagement_score: 30 } // Flagged at risk
+            { id: 'm1', branchId: 'b1', branchName: 'Accra Main', firstName: 'Kwasi', lastName: 'Mensah', email: 'kwasi.mensah@chritianmissiondunamis.org', phone: '+233501234567', familyId: 'fam_mensah', familyRole: 'Husband', spiritualMilestones: ['Baptized: 2018-04-12', 'Member: 2019-01-01'], volunteer_skills: ['Worship Vocals', 'Keyboard', 'Guitar'], engagement_score: 95, maritalStatus: 'Married', background: 'Led worship at a fellowship for six years; works as a sound technician in Accra.', expectations: 'To grow the worship team and mentor younger musicians.' },
+            { id: 'm2', branchId: 'b1', branchName: 'Accra Main', firstName: 'Ama', lastName: 'Mensah', email: 'ama.mensah@chritianmissiondunamis.org', phone: '+233502345678', familyId: 'fam_mensah', familyRole: 'Wife', spiritualMilestones: ['Baptized: 2019-06-20'], volunteer_skills: ['Childcare', 'Greeting'], engagement_score: 88, maritalStatus: 'Married', background: "Teacher; ran a children's holiday programme before joining.", expectations: "To help build up the children's ministry." },
+            { id: 'm3', branchId: 'b1', branchName: 'Accra Main', firstName: 'Kofi', lastName: 'Asante', email: 'kofi.asante@email.com', phone: '+233503456789', familyId: 'fam_asante', familyRole: 'Single', spiritualMilestones: ['Member: 2021-03-10'], volunteer_skills: ['Ushering', 'Security', 'First Aid'], engagement_score: 75 },
+            { id: 'm4', branchId: 'b1', branchName: 'Accra Main', firstName: 'Abena', lastName: 'Boateng', email: 'abena.b@email.com', phone: '+233504567890', familyId: 'fam_boateng', familyRole: 'Single', spiritualMilestones: ['Baptized: 2022-11-05'], volunteer_skills: ['Ushering', 'Greeting'], engagement_score: 62 },
+            { id: 'm5', branchId: 'b2', branchName: 'Kumasi Branch', firstName: 'Yaw', lastName: 'Owusu', email: 'yaw.owusu@email.com', phone: '+233505678901', familyId: 'fam_owusu', familyRole: 'Husband', spiritualMilestones: ['Member: 2015-05-24'], volunteer_skills: ['Sound Engineering', 'Video Editing'], engagement_score: 92 },
+            { id: 'm6', branchId: 'b2', branchName: 'Kumasi Branch', firstName: 'Akosua', lastName: 'Owusu', email: 'akosua.owusu@email.com', phone: '+233506789012', familyId: 'fam_owusu', familyRole: 'Wife', spiritualMilestones: ['Member: 2015-05-24'], volunteer_skills: ['Worship Vocals', 'Public Speaking'], engagement_score: 78 },
+            { id: 'm7', branchId: 'b2', branchName: 'Kumasi Branch', firstName: 'Mina', lastName: 'Adomako', email: 'mina.adomako@email.com', phone: '+233507890123', familyId: 'fam_adomako', familyRole: 'Single', spiritualMilestones: ['Baptized: 2024-02-14'], volunteer_skills: ['Greeting', 'Social Media'], engagement_score: 41, maritalStatus: 'Single', background: 'Recent graduate, works in customer service. New to church life.', expectations: 'To find community and a small group close to home.' }, // Flagged at risk
+            { id: 'm8', branchId: 'b3', branchName: 'Takoradi Branch', firstName: 'Kwame', lastName: 'Agyemang', email: 'kwame.agyemang@email.com', phone: '+233508901234', familyId: 'fam_agyemang', familyRole: 'Single', spiritualMilestones: ['Member: 2023-09-12'], volunteer_skills: ['Graphics', 'Video Editing', 'Website Support'], engagement_score: 84 },
+            { id: 'm9', branchId: 'b3', branchName: 'Takoradi Branch', firstName: 'Aba', lastName: 'Karpoe', email: 'aba.karpoe@email.com', phone: '+233509012345', familyId: 'fam_karpoe', familyRole: 'Single', spiritualMilestones: [], volunteer_skills: ['Greeting', 'First Aid'], engagement_score: 35 }, // Flagged at risk
+            { id: 'm10', branchId: 'b1', branchName: 'Accra Main', firstName: 'Kodjo', lastName: 'Anane', email: 'kodjo.a@email.com', phone: '+233510123456', familyId: 'fam_anane', familyRole: 'Husband', spiritualMilestones: ['Baptized: 2010-08-15'], volunteer_skills: ['Youth Mentorship', 'Security'], engagement_score: 30 } // Flagged at risk
         ],
         transactions: [],
+        collectionSessions: [],
         attendance: [],
+        attendanceHeadcounts: [],
         // A few standing orders so the recurring-giving panel demonstrates the
         // feature out of the box. Members here are from the handcrafted core.
         recurringGifts: [
-            { id: 'rec_seed_1', memberId: 'm1', memberName: 'John Kamau', branchId: 'b1', branchName: 'Nairobi CBD', amount: 5000, category: 'Tithe', frequency: 'monthly', method: 'M-Pesa', nextDate: '2026-08-01', active: true },
-            { id: 'rec_seed_2', memberId: 'm2', memberName: 'Mary Kamau', branchId: 'b1', branchName: 'Nairobi CBD', amount: 1500, category: 'Offering', frequency: 'weekly', method: 'M-Pesa', nextDate: '2026-07-20', active: true },
-            { id: 'rec_seed_3', memberId: 'm5', memberName: 'Samuel Kariuki', branchId: 'b2', branchName: 'Kawangware', amount: 3000, category: 'Tithe', frequency: 'monthly', method: 'Bank Transfer', nextDate: '2026-08-05', active: true },
-            { id: 'rec_seed_4', memberId: 'm8', memberName: 'Peter Kiprono', branchId: 'b3', branchName: 'Nakuru', amount: 2000, category: 'Project Donation', frequency: 'monthly', method: 'M-Pesa', nextDate: '2026-08-03', active: true }
+            { id: 'rec_seed_1', memberId: 'm1', memberName: 'Kwasi Mensah', branchId: 'b1', branchName: 'Accra Main', amount: 500, category: 'Tithe', frequency: 'monthly', method: 'Mobile Money', nextDate: '2026-08-01', active: true },
+            { id: 'rec_seed_2', memberId: 'm2', memberName: 'Ama Mensah', branchId: 'b1', branchName: 'Accra Main', amount: 150, category: 'Offering', frequency: 'weekly', method: 'Mobile Money', nextDate: '2026-07-20', active: true },
+            { id: 'rec_seed_3', memberId: 'm5', memberName: 'Yaw Owusu', branchId: 'b2', branchName: 'Kumasi Branch', amount: 300, category: 'Tithe', frequency: 'monthly', method: 'Bank Transfer', nextDate: '2026-08-05', active: true },
+            { id: 'rec_seed_4', memberId: 'm8', memberName: 'Kwame Agyemang', branchId: 'b3', branchName: 'Takoradi Branch', amount: 200, category: 'Project Donation', frequency: 'monthly', method: 'Mobile Money', nextDate: '2026-08-03', active: true }
         ],
         // One campaign per fund category — `raised` is summed from matching
         // transactions, so two campaigns sharing a category would double-count.
@@ -86,20 +138,20 @@ const ChurchApp = {
         followUps: [
             { id: 'fu1', name: 'Peter Njoroge', branchId: 'b1', stage: 'New Guest', owner: 'Pastor Joseph', note: 'First-time guest at 2nd Service, filled a connect card.' },
             { id: 'fu2', name: 'Linda Achieng', branchId: 'b1', stage: 'Contacted', owner: 'Grace Mwangi', note: 'Called; interested in joining a home fellowship.' },
-            { id: 'fu3', name: 'Brian Mutua', branchId: 'b2', stage: 'Connected', owner: 'Samuel Kariuki', note: 'Joined the Tuesday Kawangware home fellowship.' },
-            { id: 'fu4', name: 'Janet Cherono', branchId: 'b3', stage: 'New Guest', owner: 'Peter Kiprono', note: 'Walked in at the Nakuru campus after watching NURU TV.' }
+            { id: 'fu3', name: 'Ernest Budu', branchId: 'b2', stage: 'Connected', owner: 'Yaw Owusu', note: 'Joined the Tuesday Kumasi home fellowship.' },
+            { id: 'fu4', name: 'Esi Agyeman', branchId: 'b3', stage: 'New Guest', owner: 'Kwame Agyemang', note: 'Walked in at the Takoradi campus.' }
         ],
         groups: [
             { id: 'g1', name: 'Young Adults Fellowship', branchId: 'b1', schedule: 'Tue 6:30 PM', description: '20s–30s community — Bible study, mentorship and fellowship.', memberIds: ['m1', 'm3'] },
             { id: 'g2', name: 'Family Life & Marriage', branchId: 'b1', schedule: 'Wed 5:30 PM', description: 'For couples growing together in faith.', memberIds: ['m2'] },
             { id: 'g3', name: 'Intercessors Fellowship', branchId: 'b1', schedule: 'Fri 6:00 AM', description: 'Corporate prayer for the church, the city and the nation.', memberIds: [] },
             { id: 'g4', name: "Men's Morning Prayer", branchId: 'b2', schedule: 'Sat 6:00 AM', description: 'Prayer, accountability and breakfast.', memberIds: ['m5'] },
-            { id: 'g5', name: 'Kawangware Home Fellowship', branchId: 'b2', schedule: 'Tue 6:00 PM', description: 'Midweek fellowship in homes around the campus.', memberIds: [] },
+            { id: 'g5', name: 'Kumasi Home Fellowship', branchId: 'b2', schedule: 'Tue 6:00 PM', description: 'Midweek fellowship in homes around the campus.', memberIds: [] },
             { id: 'g6', name: 'Women of Grace', branchId: 'b3', schedule: 'Thu 10:00 AM', description: 'Bible study and fellowship.', memberIds: ['m8'] },
-            { id: 'g7', name: 'Nakuru Youth Fellowship', branchId: 'b3', schedule: 'Sat 4:00 PM', description: 'Teens and young adults — worship, mentorship and sport.', memberIds: [] }
+            { id: 'g7', name: 'Takoradi Youth Fellowship', branchId: 'b3', schedule: 'Sat 4:00 PM', description: 'Teens and young adults — worship, mentorship and sport.', memberIds: [] }
         ],
         announcements: [
-            { id: 'an1', title: 'Baptism Sunday — register now', body: 'Maximum Miracle Centre is holding a baptism service on the last Sunday of the month at the Nairobi CBD campus. Speak to a pastor or reply to register.', audience: 'all', channels: ['sms', 'push'], recipients: 10, sentAt: '2026-07-06T09:00:00Z' }
+            { id: 'an1', title: 'Baptism Sunday — register now', body: 'Christian Mission Dunamis is holding a baptism service on the last Sunday of the month at the Accra Main campus. Speak to a pastor or reply to register.', audience: 'all', channels: ['sms', 'push'], recipients: 10, sentAt: '2026-07-06T09:00:00Z' }
         ],
         readingPlans: [
             { id: 'rp1', title: '7 Days of Peace', emoji: '🕊️', days: [
@@ -122,50 +174,45 @@ const ChurchApp = {
         readingState: {},
         events: [
             { id: 'e1', branchId: 'b1', title: 'Youth Praise Night', description: 'An evening of worship, drama, and networking for young adults.', date: '2026-07-19', time: '18:00', rolesRequired: ['Worship Vocals', 'Keyboard', 'Guitar', 'Sound Engineering', 'Greeting'], volunteersSignedUp: ['m1'] },
-            { id: 'e2', branchId: 'b2', title: 'Kawangware Community Outreach', description: 'Food, clothing and medical support for families around the Kawangware campus.', date: '2026-07-25', time: '09:00', rolesRequired: ['Greeting', 'First Aid', 'Security'], volunteersSignedUp: ['m6'] },
-            { id: 'e3', branchId: 'b1', title: 'Sunday 2nd Service — Nairobi CBD', description: 'Main Sunday gathering at Embassy Cinema, Latema Road.', date: '2026-07-12', time: '10:00', rolesRequired: ['Ushering', 'Greeting', 'Sound Engineering', 'Worship Vocals', 'Security'], volunteersSignedUp: ['m3', 'm4'] }
+            { id: 'e2', branchId: 'b2', title: 'Kumasi Community Outreach', description: 'Food, clothing and medical support for families around the Kumasi campus.', date: '2026-07-25', time: '09:00', rolesRequired: ['Greeting', 'First Aid', 'Security'], volunteersSignedUp: ['m6'] },
+            { id: 'e3', branchId: 'b1', title: 'Sunday 2nd Service — Accra Main', description: 'Main Sunday gathering at Accra Main campus.', date: '2026-07-12', time: '10:00', rolesRequired: ['Ushering', 'Greeting', 'Sound Engineering', 'Worship Vocals', 'Security'], volunteersSignedUp: ['m3', 'm4'] }
         ],
         sermons: [
-            { id: 's1', title: 'Walking by Faith, Not by Sight', preacher: 'Bishop Joseph Mwangi', date: '2026-07-05', branchName: 'Nairobi CBD', thumbnail: 'sermon_faith', duration: '42:15', mediaUrl: 'https://www.w3schools.com/html/mov_bbb.mp4' },
-            { id: 's2', title: 'The Heart of a Faithful Steward', preacher: 'Pastor Samuel Kariuki', date: '2026-06-28', branchName: 'Kawangware', thumbnail: 'sermon_steward', duration: '38:40', mediaUrl: 'https://www.w3schools.com/html/movie.mp4' }
+            { id: 's1', title: 'Walking by Faith, Not by Sight', preacher: 'Apostle Joseph Mensah', date: '2026-07-05', branchName: 'Accra Main', thumbnail: 'sermon_faith', duration: '42:15', mediaUrl: 'https://www.w3schools.com/html/mov_bbb.mp4' },
+            { id: 's2', title: 'The Heart of a Faithful Steward', preacher: 'Pastor Yaw Owusu', date: '2026-06-28', branchName: 'Kumasi Branch', thumbnail: 'sermon_steward', duration: '38:40', mediaUrl: 'https://www.w3schools.com/html/movie.mp4' }
         ],
         prayerRequests: [
-            { id: 'pr1', memberId: 'm1', memberName: 'John Kamau', branchName: 'Nairobi CBD', text: 'Praying for my family as we plan to travel upcountry this week.', category: 'Family', route: 'Family Life & Marriage Ministry', status: 'Approved', timestamp: '2026-07-10T14:30:00Z' },
-            { id: 'pr2', memberId: 'm7', memberName: 'Faith Wanjiku', branchName: 'Kawangware', text: 'I am recovering from knee surgery and still in moderate pain.', category: 'Healing', route: 'Hospital & Home Care Ministry', status: 'Assigned', timestamp: '2026-07-11T09:15:00Z' }
+            { id: 'pr1', memberId: 'm1', memberName: 'Kwasi Mensah', branchName: 'Accra Main', text: 'Praying for my family as we plan to travel this week.', category: 'Family', route: 'Family Life & Marriage Ministry', status: 'Approved', timestamp: '2026-07-10T14:30:00Z' },
+            { id: 'pr2', memberId: 'm7', memberName: 'Mina Adomako', branchName: 'Kumasi Branch', text: 'I am recovering from surgery and still in moderate pain.', category: 'Healing', route: 'Hospital & Home Care Ministry', status: 'Assigned', timestamp: '2026-07-11T09:15:00Z' }
         ]
     },
 
     // 2. Active Session Configuration
     session: {
-        currentRole: 'hq_admin', // hq_admin, branch_admin, ministry_leader, member
+        currentRole: 'hq_admin', // hq_admin, branch_admin, ministry_leader
         currentBranch: 'b1',
-        activeTab: 'admin_dashboard', // dashboard, directory, financials, ministry, communications, settings, mobile_preview
+        activeTab: 'admin_dashboard', // dashboard, directory, financials, ministry, communications
         mfaVerified: true,
         selectedMemberId: null,
         selectedEventId: 'e3',
-        simulatedMobileView: 'home', // home, sermons, bible, give, serve, chat
-        bibleVersion: 'ESV'
     },
 
     // 3. Application Charts (Chart.js references)
     charts: {},
 
-    // Demo accounts for the mock auth gate. In a real deployment these live in
-    // a backend identity store; here they map a login to a role for RBAC.
+    // Standalone demo accounts; production authentication is handled by the API.
     DEMO_USERS: [
-        { email: 'admin@maximummiracle.org', password: 'grace', name: 'HQ Administrator', role: 'hq_admin', branchId: 'b1' },
-        { email: 'kawangware@maximummiracle.org', password: 'grace', name: 'Kawangware Campus Admin', role: 'branch_admin', branchId: 'b2' },
-        { email: 'worship@maximummiracle.org', password: 'grace', name: 'Worship Leader', role: 'ministry_leader', branchId: 'b1' },
-        { email: 'john@maximummiracle.org', password: 'grace', name: 'John Kamau', role: 'member', branchId: 'b1' }
+        { email: 'admin@chritianmissiondunamis.org', password: 'grace', name: 'HQ Administrator', role: 'hq_admin', branchId: 'b1' },
+        { email: 'kumasi@chritianmissiondunamis.org', password: 'grace', name: 'Kumasi Campus Admin', role: 'branch_admin', branchId: 'b2' },
+        { email: 'worship@chritianmissiondunamis.org', password: 'grace', name: 'Worship Leader', role: 'ministry_leader', branchId: 'b1' },
     ],
 
     // RBAC: which tabs each role may access. Enforced in renderAll — not just
-    // hidden in the nav, so a member cannot reach an admin panel by any route.
+    // hidden in the nav, so a user cannot reach an admin panel by any route.
     ROLE_TABS: {
-        hq_admin: ['admin_dashboard', 'admin_directory', 'admin_financials', 'admin_attendance', 'admin_ministry', 'admin_followups', 'admin_groups', 'admin_communications', 'mobile_preview'],
-        branch_admin: ['admin_dashboard', 'admin_directory', 'admin_financials', 'admin_attendance', 'admin_ministry', 'admin_followups', 'admin_groups', 'admin_communications', 'mobile_preview'],
-        ministry_leader: ['admin_dashboard', 'admin_attendance', 'admin_ministry', 'admin_followups', 'admin_groups', 'admin_communications', 'mobile_preview'],
-        member: ['mobile_preview']
+        hq_admin: ['admin_dashboard', 'admin_directory', 'admin_financials', 'admin_attendance', 'admin_ministry', 'admin_followups', 'admin_groups', 'admin_communications'],
+        branch_admin: ['admin_dashboard', 'admin_directory', 'admin_financials', 'admin_attendance', 'admin_ministry', 'admin_followups', 'admin_groups', 'admin_communications'],
+        ministry_leader: ['admin_dashboard', 'admin_attendance', 'admin_ministry', 'admin_followups', 'admin_groups', 'admin_communications']
     },
 
     // 4. Initialize Data & Render
@@ -181,13 +228,12 @@ const ChurchApp = {
             this.initApiAuth();
         } else {
             const session = this.loadSession();
-            if (session) {
-                this.applyUser(session);
+            if (session && this.applyUser(session)) {
                 this.showApp();
                 this.renderAll();
-            } else if (this.wantsPreviewEntry()) {
+            } else if (!session && this.wantsPreviewEntry()) {
                 this.enterPreview();
-            } else {
+            } else if (!session) {
                 this.showAuthScreen('credentials');
             }
         }
@@ -221,7 +267,8 @@ const ChurchApp = {
     // (campuses, people, currency). A saved DB stamped with an older version is
     // discarded and re-seeded so returning demo visitors don't keep stale data.
     // In API mode this is moot — the server's data replaces it on hydrate.
-    SEED_VERSION: 5,
+    // Version 8 removes every preloaded record and retires demo access.
+    SEED_VERSION: 8,
 
     // Persistence: Load state
     loadDB() {
@@ -252,9 +299,7 @@ const ChurchApp = {
         }
         // Fallback: generate and save
         this.db.__seedVersion = this.SEED_VERSION;
-        this.generateCongregation();
-        this.generateInitialTransactions();
-        this.generateInitialAttendance();
+        this.clearSeededActivity();
         this.saveDB();
     },
 
@@ -266,6 +311,8 @@ const ChurchApp = {
         let changed = false;
         if (this.db.__seedVersion !== this.SEED_VERSION) { this.db.__seedVersion = this.SEED_VERSION; changed = true; }
         if (!Array.isArray(this.db.transactions)) { this.db.transactions = []; changed = true; }
+        if (!Array.isArray(this.db.collectionSessions)) { this.db.collectionSessions = []; changed = true; }
+        if (!Array.isArray(this.db.attendanceHeadcounts)) { this.db.attendanceHeadcounts = []; changed = true; }
         if (!Array.isArray(this.db.events)) { this.db.events = []; changed = true; }
         if (!Array.isArray(this.db.sermons)) { this.db.sermons = []; changed = true; }
         if (!Array.isArray(this.db.prayerRequests)) { this.db.prayerRequests = []; changed = true; }
@@ -282,11 +329,31 @@ const ChurchApp = {
             this.db.readingState = {};
             changed = true;
         }
-        if (!Array.isArray(this.db.attendance) || this.db.attendance.length === 0) {
+        if (!Array.isArray(this.db.attendance) || (this.db.members.length > 0 && this.db.attendance.length === 0)) {
             this.generateInitialAttendance();
             changed = true;
         }
         if (changed) this.saveDB();
+    },
+
+    // Keep the configured campuses and sign-in shell, but remove every
+    // preloaded record. Administrators can add real records from the app.
+    clearSeededActivity() {
+        this.db.members = [];
+        this.db.transactions = [];
+        this.db.collectionSessions = [];
+        this.db.attendance = [];
+        this.db.attendanceHeadcounts = [];
+        this.db.recurringGifts = [];
+        this.db.campaigns = [];
+        this.db.followUps = [];
+        this.db.groups = [];
+        this.db.announcements = [];
+        this.db.events = [];
+        this.db.sermons = [];
+        this.db.prayerRequests = [];
+        this.db.readingPlans = [];
+        this.db.readingState = {};
     },
 
     // The Sundays we hold services on — most recent `count`, oldest first.
@@ -314,9 +381,16 @@ const ChurchApp = {
                 localStorage.setItem('church2_theme', savedTheme);
             }
             document.body.className = savedTheme === 'dark' ? '' : 'theme-' + savedTheme;
+            this.syncThemeColor(savedTheme);
             const themeSelect = document.getElementById('interface-theme-select');
             if (themeSelect) themeSelect.value = savedTheme;
         }
+    },
+
+    syncThemeColor(theme) {
+        const colors = { light: '#f3f6fb', dark: '#080b14', midnight: '#01040f' };
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = colors[theme] || colors.dark;
     },
 
     // ---- Auth gate (mock login + MFA + RBAC) --------------------------------
@@ -360,14 +434,22 @@ const ChurchApp = {
     },
 
     applyUser(user) {
+        if (!this.ROLE_TABS[user.role]) {
+            if (typeof localStorage !== 'undefined') localStorage.removeItem('church2_session');
+            if (window.Church2API && Church2API.isEnabled()) Church2API.logout();
+            this.session.currentUser = null;
+            this.showAuthScreen('credentials');
+            return false;
+        }
         this.session.currentUser = user;
         this.session.currentRole = user.role;
         this.session.currentBranch = user.role === 'hq_admin' ? 'b1' : user.branchId;
         this.session.mfaVerified = true;
-        this.session.activeTab = user.role === 'member' ? 'mobile_preview' : 'admin_dashboard';
+        this.session.activeTab = 'admin_dashboard';
         // Reflect the signed-in role in the simulator dropdown.
         const roleSel = document.getElementById('role-simulator-select');
         if (roleSel) roleSel.value = user.role;
+        return true;
     },
 
     showApp() {
@@ -388,7 +470,7 @@ const ChurchApp = {
         if (step === 'mfa') {
             auth.innerHTML = `
                 <div class="auth-card">
-                    <div class="auth-brand"><span class="auth-logo"><svg class="svg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v15M7.5 9.2h9"/><path d="M5.6 19.4c1.7-2.2 3.8-3.3 6.4-3.3s4.7 1.1 6.4 3.3" opacity="0.85"/></svg></span><span>Maximum Miracle Centre</span></div>
+                    <div class="auth-brand"><span class="auth-logo"><svg class="svg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v15M7.5 9.2h9"/><path d="M5.6 19.4c1.7-2.2 3.8-3.3 6.4-3.3s4.7 1.1 6.4 3.3" opacity="0.85"/></svg></span><span>Christian Mission Dunamis</span></div>
                     <h2 class="auth-title">Two-factor verification</h2>
                     <p class="auth-sub">We texted a 6-digit code to the phone on file for <strong>${esc(ctx.email)}</strong>. Enter it to continue. <span class="auth-hint">(demo code: 123456)</span></p>
                     <form id="mfa-form" class="auth-form">
@@ -404,55 +486,41 @@ const ChurchApp = {
             return;
         }
 
+        if (step === 'signup') {
+            this.showAuthScreen('credentials');
+            const error = document.getElementById('auth-error');
+            if (error) error.textContent = 'Member account registration is no longer available.';
+            return;
+        }
+
         // credentials step
         auth.innerHTML = `
             <div class="auth-card">
-                <div class="auth-brand"><span class="auth-logo"><svg class="svg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v15M7.5 9.2h9"/><path d="M5.6 19.4c1.7-2.2 3.8-3.3 6.4-3.3s4.7 1.1 6.4 3.3" opacity="0.85"/></svg></span><span>Maximum Miracle Centre</span></div>
+                <div class="auth-brand"><span class="auth-logo"><svg class="svg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v15M7.5 9.2h9"/><path d="M5.6 19.4c1.7-2.2 3.8-3.3 6.4-3.3s4.7 1.1 6.4 3.3" opacity="0.85"/></svg></span><span>Christian Mission Dunamis</span></div>
                 <h2 class="auth-title">Sign in to your ministry console</h2>
                 <p class="auth-sub">Secure access to your church's data.</p>
                 <form id="login-form" class="auth-form">
                     <label class="auth-label" for="login-email">Email</label>
-                    <input type="email" id="login-email" class="auth-input" placeholder="you@maximummiracle.org" autocomplete="username" required>
+                    <input type="email" id="login-email" class="auth-input" placeholder="you@chritianmissiondunamis.org" autocomplete="username" required>
                     <label class="auth-label" for="login-password">Password</label>
                     <input type="password" id="login-password" class="auth-input" placeholder="••••••••" autocomplete="current-password" required>
                     <p id="auth-error" class="auth-error" role="alert"></p>
                     <button type="submit" class="auth-btn">Continue</button>
                 </form>
-                ${this.apiEnabled() ? '' : `
-                <button type="button" class="auth-btn auth-preview-btn" id="enter-preview-btn">
-                    Open the preview &rarr;
-                </button>
-                <p class="auth-demo-notice"><strong>Sample data.</strong>
-                    Nothing here is ${esc((window.MMC_BRAND && MMC_BRAND.name) || 'the church')}'s real
-                    membership or giving, and giving is recorded rather than charged. Or sign in
-                    below with any account to see the login flow.</p>`}
-                <div class="auth-demo">
-                    <span>Demo accounts (password <code>grace</code>):</span>
-                    <div class="auth-demo-chips">
-                        <button type="button" class="auth-demo-chip" data-email="admin@maximummiracle.org">HQ Admin</button>
-                        <button type="button" class="auth-demo-chip" data-email="kawangware@maximummiracle.org">Campus Admin</button>
-                        <button type="button" class="auth-demo-chip" data-email="worship@maximummiracle.org">Ministry Leader</button>
-                        <button type="button" class="auth-demo-chip" data-email="john@maximummiracle.org">Member</button>
-                    </div>
-                </div>
+                ${this.apiEnabled() ? '' : '<p class="auth-demo-notice">Standalone demo mode: accounts are stored only in this browser.</p>'}
             </div>`;
         document.getElementById('login-form').onsubmit = (e) => { e.preventDefault(); this.handleLogin(); };
-        const previewBtn = document.getElementById('enter-preview-btn');
-        if (previewBtn) previewBtn.onclick = () => this.enterPreview();
-
-        auth.querySelectorAll('.auth-demo-chip').forEach(chip => {
-            chip.onclick = () => {
-                document.getElementById('login-email').value = chip.dataset.email;
-                document.getElementById('login-password').value = 'grace';
-            };
-        });
     },
 
     // Restore an API-backed session from the stored token (production mode).
     initApiAuth() {
         if (Church2API.getToken()) {
             Church2API.me()
-                .then(({ user }) => { this.applyUser(user); this.showApp(); this.hydrateThenRender(); })
+                .then(({ user }) => {
+                    if (!this.applyUser(user)) return;
+                    this.showApp();
+                    this.hydrateThenRender();
+                })
                 .catch(() => { Church2API.logout(); this.showAuthScreen('credentials'); });
         } else {
             this.showAuthScreen('credentials');
@@ -461,7 +529,7 @@ const ChurchApp = {
 
     _finishApiLogin(user) {
         // The JWT is already stored by the API client; never persist the password.
-        this.applyUser(user);
+        if (!this.applyUser(user)) return;
         this.showApp();
         this.hydrateThenRender();
         this.toast(`Welcome, ${user.name}. 👋`);
@@ -475,11 +543,15 @@ const ChurchApp = {
     apiEnabled() { return Boolean(window.Church2API && Church2API.isEnabled()); },
 
     // Who may change the membership roll. Agreed 17 Aug: adding and removing
-    // members is the administrator's job alone — ministry leaders and members
+    // members is the administrator's job alone — ministry leaders
     // may read the roll but never alter it. Checked at every mutation as well
     // as when drawing the UI, because a hidden button is not a permission.
     isAdmin() {
         return this.session.currentRole === 'hq_admin' || this.session.currentRole === 'branch_admin';
+    },
+
+    canManageMinistryItems() {
+        return this.isAdmin() || this.session.currentRole === 'ministry_leader';
     },
 
     // How someone travelled to the service. Motorcycle is labelled for Kenya,
@@ -496,6 +568,63 @@ const ChurchApp = {
         return skills.length ? skills[0] : 'Member';
     },
 
+    openModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (!modal) throw new Error(`Modal "${modalId}" was not found`);
+
+        this._modalFocusReturn ||= new Map();
+        if (!this._modalFocusReturn.has(modalId)) {
+            this._modalFocusReturn.set(modalId, document.activeElement);
+        }
+        if (this._modalOriginalOverflow === undefined) {
+            this._modalOriginalOverflow = document.body.style.overflow;
+        }
+
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+
+        const focusTarget = modal.querySelector(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        ) || modal.querySelector('.modal-card');
+        if (focusTarget) {
+            if (!focusTarget.hasAttribute('tabindex') && focusTarget.classList.contains('modal-card')) {
+                focusTarget.setAttribute('tabindex', '-1');
+            }
+            requestAnimationFrame(() => focusTarget.focus());
+        }
+    },
+
+    closeModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (!modal) throw new Error(`Modal "${modalId}" was not found`);
+
+        if (modalId === 'confirm-modal' && this._confirmResolver) {
+            this._confirmResolver();
+            return;
+        }
+
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+        const returnFocus = this._modalFocusReturn?.get(modalId);
+        this._modalFocusReturn?.delete(modalId);
+
+        const anotherModalOpen = [...document.querySelectorAll('.modal-overlay')]
+            .some((overlay) => overlay.style.display !== 'none' && getComputedStyle(overlay).display !== 'none');
+        if (!anotherModalOpen) {
+            document.body.style.overflow = this._modalOriginalOverflow || '';
+            this._modalOriginalOverflow = undefined;
+            if (returnFocus?.isConnected) returnFocus.focus();
+        }
+    },
+
+    closeAnyOpenModal() {
+        const openModals = [...document.querySelectorAll('.modal-overlay')]
+            .filter((overlay) => overlay.style.display !== 'none' && getComputedStyle(overlay).display !== 'none');
+        const modal = openModals[openModals.length - 1];
+        if (modal) this.closeModal(modal.id);
+    },
+
     // A promise-based confirm so destructive actions get a real dialog rather
     // than a blocking window.confirm(), which the rest of the app avoids.
     confirmAction({ title, body, confirmLabel = 'Confirm', danger = true }) {
@@ -508,12 +637,17 @@ const ChurchApp = {
             const cancel = modal.querySelector('#confirm-cancel');
             ok.textContent = confirmLabel;
             ok.className = danger ? 'btn btn-danger' : 'btn btn-primary-gradient';
+            let settled = false;
             const finish = (answer) => {
+                if (settled) return;
+                settled = true;
+                this._confirmResolver = null;
                 ok.onclick = null;
                 cancel.onclick = null;
                 this.closeModal('confirm-modal');
                 resolve(answer);
             };
+            this._confirmResolver = () => finish(false);
             ok.onclick = () => finish(true);
             cancel.onclick = () => finish(false);
             this.openModal('confirm-modal');
@@ -541,6 +675,10 @@ const ChurchApp = {
     renderDemoBanner() {
         const bar = document.getElementById('demo-banner');
         if (!bar) return;
+        // The production build does not display a demo-data notice because it
+        // ships with no sample records.
+        bar.hidden = true;
+        return;
         if (this.apiEnabled() || sessionStorage.getItem('church2_demo_notice') === 'hidden') {
             bar.hidden = true;
             return;
@@ -574,27 +712,36 @@ const ChurchApp = {
     async hydrateFromApi() {
         if (!this.apiEnabled()) return;
         const g = 'global';
-        const grab = (p) => p.then((r) => r).catch((e) => { console.error('Hydrate failed:', e); return undefined; });
-        const [members, transactions, attendance, groups, followUps, announcements, prayerRequests, events] = await Promise.all([
+    const canReadFinancialSchedules = this.isAdmin();
+    const grab = (p) => p.then((r) => r).catch((e) => { console.error('Hydrate failed:', e); return undefined; });
+        const [members, transactions, collectionSessions, attendance, attendanceHeadcounts, groups, followUps, announcements, prayerRequests, events, campaigns, recurringGifts] = await Promise.all([
             grab(Church2API.members(g)),
             grab(Church2API.transactions(g)),
+            grab(Church2API.collectionSessions(g)),
             grab(Church2API.attendance(g)),
+            grab(Church2API.attendanceHeadcounts(g)),
             grab(Church2API.groups(g)),
             grab(Church2API.followups(g)),
             grab(Church2API.announcements()),
             grab(Church2API.prayerRequests(g)),
             grab(Church2API.events(g)),
+            canReadFinancialSchedules ? grab(Church2API.campaigns(g)) : Promise.resolve(undefined),
+            canReadFinancialSchedules ? grab(Church2API.recurringGifts(g)) : Promise.resolve(undefined),
         ]);
-        // Members drive most member-centric views; only replace with a non-empty
-        // set so an unseeded/misconfigured backend can't blank the whole UI.
-        if (Array.isArray(members) && members.length) this.db.members = members;
+        // Successful empty responses are authoritative too; otherwise deleted
+        // or not-yet-created records reappear from the browser's saved copy.
+        if (Array.isArray(members)) this.db.members = members;
         if (Array.isArray(transactions)) this.db.transactions = transactions;
+        if (Array.isArray(collectionSessions)) this.db.collectionSessions = collectionSessions;
         if (Array.isArray(attendance)) this.db.attendance = attendance;
+        if (Array.isArray(attendanceHeadcounts)) this.db.attendanceHeadcounts = attendanceHeadcounts;
         if (Array.isArray(groups)) this.db.groups = groups;
         if (Array.isArray(followUps)) this.db.followUps = followUps;
         if (Array.isArray(announcements)) this.db.announcements = announcements;
         if (Array.isArray(prayerRequests)) this.db.prayerRequests = prayerRequests;
-        if (Array.isArray(events) && events.length) this.db.events = events;
+        if (Array.isArray(events)) this.db.events = events;
+        if (Array.isArray(campaigns)) this.db.campaigns = campaigns;
+        if (Array.isArray(recurringGifts)) this.db.recurringGifts = recurringGifts;
     },
 
     // Fire an API write in the background. The local optimistic update has
@@ -617,12 +764,30 @@ const ChurchApp = {
 
         // Production: authenticate against the real API.
         if (window.Church2API && Church2API.isEnabled()) {
+            const submit = document.querySelector('#login-form button[type="submit"]');
+            if (submit?.disabled) return;
+            if (submit) {
+                submit.disabled = true;
+                submit.textContent = 'Signing in…';
+            }
             Church2API.login(email, password)
                 .then((r) => {
                     if (r.mfaRequired) this.showAuthScreen('mfa', { email, ticket: r.ticket });
                     else if (r.token) { Church2API.completePasswordLogin(r); this._finishApiLogin(r.user); }
                 })
-                .catch((e) => { if (err) err.textContent = e.message || 'Sign in failed.'; });
+                .catch((e) => {
+                    if (err) {
+                        err.textContent = e.name === 'TypeError'
+                            ? 'Cannot reach the sign-in server. Check the API address or server connection.'
+                            : e.message || 'Sign in failed.';
+                    }
+                })
+                .finally(() => {
+                    if (submit?.isConnected) {
+                        submit.disabled = false;
+                        submit.textContent = 'Continue';
+                    }
+                });
             return;
         }
 
@@ -657,8 +822,9 @@ const ChurchApp = {
             return;
         }
         const user = this.DEMO_USERS.find(u => u.email === ctx.email);
-        this.saveSession(user);
-        this.applyUser(user);
+        const { password, ...safeUser } = user;
+        if (!this.applyUser(safeUser)) return;
+        this.saveSession(safeUser);
         this.showApp();
         this.renderAll();
         this.toast(`Welcome, ${user.name}. 👋`);
@@ -862,6 +1028,7 @@ const ChurchApp = {
             themeSelectEl.addEventListener('change', (e) => {
                 const theme = e.target.value;
                 document.body.className = theme === 'dark' ? '' : 'theme-' + theme;
+                this.syncThemeColor(theme);
                 if (typeof localStorage !== 'undefined') {
                     localStorage.setItem('church2_theme', theme);
                 }
@@ -877,14 +1044,7 @@ const ChurchApp = {
         // Role Selector Change
         document.getElementById('role-simulator-select').addEventListener('change', (e) => {
             this.session.currentRole = e.target.value;
-            
-            // Auto update active tab depending on role
-            if (this.session.currentRole === 'member') {
-                this.session.activeTab = 'mobile_preview';
-            } else if (this.session.activeTab === 'mobile_preview') {
-                this.session.activeTab = 'admin_dashboard';
-            }
-            
+            this.session.activeTab = 'admin_dashboard';
             this.renderAll();
         });
 
@@ -913,6 +1073,26 @@ const ChurchApp = {
         document.getElementById('member-branch-filter').addEventListener('change', () => {
             this.renderMemberDirectory();
         });
+        document.getElementById('member-branch-select').addEventListener('change', (event) => {
+            if (this.memberImportState?.running) {
+                event.target.value = this.memberImportState.branchId;
+                return;
+            }
+            this.renderMemberGroupOptions();
+            this.resetMemberImport();
+        });
+        document.getElementById('member-csv-file').addEventListener('change', (event) => {
+            this.handleMemberCsvSelected(event.target.files?.[0]);
+        });
+        document.getElementById('member-csv-template').addEventListener('click', () => this.downloadMemberCsvTemplate());
+        document.getElementById('member-import-cancel').addEventListener('click', () => this.resetMemberImport());
+        document.getElementById('member-import-submit').addEventListener('click', () => this.importMembersFromCsv());
+        document.getElementById('member-account-role').addEventListener('change', (event) => {
+            const enabled = Boolean(event.target.value);
+            document.getElementById('member-account-fields').hidden = !enabled;
+            document.getElementById('member-account-password').required = enabled;
+            event.target.setAttribute('aria-expanded', String(enabled));
+        });
 
         // Add Member Form Submit
         document.getElementById('add-member-form').addEventListener('submit', (e) => {
@@ -925,30 +1105,21 @@ const ChurchApp = {
             e.preventDefault();
             this.handleRecordTransaction();
         });
+        document.getElementById('collection-session-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.handleCreateCollectionSession();
+        });
+        ['collection-offering', 'collection-tithe', 'collection-other'].forEach((id) => {
+            document.getElementById(id).addEventListener('input', () => this.updateCollectionTotal());
+        });
+        document.getElementById('attendance-headcount-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.handleSaveAttendanceHeadcount();
+        });
 
         // AI Sermon Repurpose Submit
         document.getElementById('ai-repurpose-btn').addEventListener('click', () => {
             this.handleSermonRepurpose();
-        });
-
-        // Mobile Chatbot Handler
-        document.getElementById('mobile-chat-send-btn').addEventListener('click', () => {
-            this.handleMobileChatSend();
-        });
-        document.getElementById('mobile-chat-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.handleMobileChatSend();
-        });
-
-        // Mobile Giving Form Submit
-        document.getElementById('mobile-giving-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.handleMobileGiving();
-        });
-
-        // Mobile Serve Sign up button trigger
-        document.getElementById('volunteer-skills-signup-form')?.addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.handleMobileVolunteerSignup();
         });
 
         // Sign out
@@ -1046,9 +1217,13 @@ const ChurchApp = {
         // redirect to that role's default landing tab. This is real access
         // control — not merely hiding nav links — so no route reaches a panel
         // the role can't see.
-        const allowed = this.ROLE_TABS[role] || this.ROLE_TABS.member;
+        const allowed = this.ROLE_TABS[role];
+        if (!allowed) {
+            this.logout();
+            return;
+        }
         if (!allowed.includes(this.session.activeTab)) {
-            this.session.activeTab = (role === 'member') ? 'mobile_preview' : 'admin_dashboard';
+            this.session.activeTab = 'admin_dashboard';
         }
         const activeTab = this.session.activeTab;
 
@@ -1094,11 +1269,15 @@ const ChurchApp = {
         // re-checks — this only removes the temptation.
         const addCard = document.getElementById('member-add-card');
         if (addCard) addCard.style.display = this.isAdmin() ? '' : 'none';
+        const importCard = document.getElementById('member-import-card');
+        if (importCard) importCard.style.display = this.isAdmin() ? '' : 'none';
+        const branchAdminRole = document.querySelector('#member-account-role option[value="branch_admin"]');
+        if (branchAdminRole) branchAdminRole.disabled = role !== 'hq_admin';
 
         // Sidebar link visibility is driven entirely by ROLE_TABS — the single
         // source of truth — so the nav can never show a link the RBAC check at
         // the top of renderAll would immediately bounce.
-        const allowedTabs = this.ROLE_TABS[role] || this.ROLE_TABS.member;
+        const allowedTabs = this.ROLE_TABS[role];
         document.querySelectorAll('.nav-link').forEach(link => {
             const tab = link.dataset.tab;
             link.style.display = allowedTabs.includes(tab) ? 'flex' : 'none';
@@ -1106,7 +1285,7 @@ const ChurchApp = {
         });
 
         // Render main view panels
-        const panels = ['admin_dashboard', 'admin_directory', 'admin_financials', 'admin_attendance', 'admin_ministry', 'admin_followups', 'admin_groups', 'admin_communications', 'mobile_preview'];
+        const panels = ['admin_dashboard', 'admin_directory', 'admin_financials', 'admin_attendance', 'admin_ministry', 'admin_followups', 'admin_groups', 'admin_communications'];
         panels.forEach(p => {
             const panelEl = document.getElementById(p);
             if (panelEl) {
@@ -1154,8 +1333,6 @@ const ChurchApp = {
             this.renderGroups();
         } else if (activeTab === 'admin_communications') {
             this.renderCommunications();
-        } else if (activeTab === 'mobile_preview') {
-            this.renderMobilePreview();
         }
     },
 
@@ -1354,6 +1531,7 @@ const ChurchApp = {
     // Panel: Attendance & Check-In
     renderAttendance() {
         const branchId = this.session.currentBranch;
+        this.renderAttendanceHeadcounts(branchId);
         const inScope = (m) => (!branchId || branchId === 'global') ? true : m.branchId === branchId;
         const members = this.db.members.filter(inScope);
         const attendance = (this.db.attendance || []).filter(a => members.some(m => m.id === a.memberId));
@@ -1430,8 +1608,9 @@ const ChurchApp = {
                             <span class="attendance-toggle-knob"></span>
                         </button>
                     </td>
+                    <td>${rec.id && this.canManageMinistryItems() ? `<button type="button" class="action-btn-sm action-btn-danger" onclick="event.stopPropagation(); ChurchApp.removeAttendance('${esc(m.id)}', '${esc(serviceDate)}')" aria-label="Remove ${esc(name)}'s attendance record">Remove</button>` : ''}</td>
                 </tr>`;
-            }).join('') || `<tr><td colspan="5" class="muted-italic" style="text-align:center; padding:24px;">${
+            }).join('') || `<tr><td colspan="6" class="muted-italic" style="text-align:center; padding:24px;">${
                 filter ? 'Nobody on this register matches that search.' : 'No members in this scope.'
             }</td></tr>`;
         }
@@ -1457,13 +1636,137 @@ const ChurchApp = {
         this.renderArrivalSummary(members, serviceDate);
     },
 
+    renderAttendanceHeadcounts(branchId) {
+        const campusSelect = document.getElementById('attendance-headcount-branch');
+        const dateInput = document.getElementById('attendance-headcount-date');
+        const form = document.getElementById('attendance-headcount-form');
+        const canEdit = this.isAdmin();
+        if (form) form.hidden = !canEdit;
+        if (campusSelect) {
+            const isGlobal = branchId === 'all' || branchId === 'global';
+            const selectedBranch = isGlobal ? '' : branchId;
+            campusSelect.innerHTML = `${isGlobal ? '<option value="">Select campus</option>' : ''}${this.db.branches.map((branch) =>
+                `<option value="${esc(branch.id)}"${branch.id === selectedBranch ? ' selected' : ''}>${esc(branch.name)}</option>`
+            ).join('')}`;
+            campusSelect.disabled = this.session.currentRole !== 'hq_admin';
+        }
+        if (dateInput && !dateInput.value) {
+            const today = new Date();
+            dateInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        }
+
+        const inScope = (record) => !branchId || branchId === 'all' || branchId === 'global' || record.branchId === branchId;
+        const records = (this.db.attendanceHeadcounts || []).filter(inScope)
+            .sort((a, b) => b.date.localeCompare(a.date) || a.branchName.localeCompare(b.branchName));
+        const tbody = document.getElementById('attendance-headcounts-tbody');
+        if (tbody) {
+            tbody.innerHTML = records.map((record) => `<tr>
+                <td>${esc(record.date)}</td>
+                <td><span class="branch-pill badge-${esc(record.branchId)}">${esc(record.branchName)}</span></td>
+                <td class="num attendance-recorded-count">${Number(record.totalPresent).toLocaleString()}</td>
+                <td>${canEdit ? `<button type="button" class="action-btn-sm action-btn-danger" onclick="ChurchApp.removeAttendanceHeadcount('${esc(record.id)}')" aria-label="Remove attendance total for ${esc(record.date)} at ${esc(record.branchName)}">Remove</button>` : ''}</td>
+            </tr>`).join('') || '<tr><td colspan="4" class="attendance-empty-state">No attendance totals recorded yet.</td></tr>';
+        }
+    },
+
+    async removeAttendance(memberId, date) {
+        if (!this.canManageMinistryItems()) {
+            this.toast('You do not have permission to remove attendance records.', 'error');
+            return;
+        }
+        const member = this.db.members.find((item) => item.id === memberId);
+        const name = member ? `${member.firstName} ${member.lastName}` : 'This member';
+        const confirmed = await this.confirmAction({
+            title: `Remove ${name}'s attendance record?`,
+            body: `The check-in record for ${this.formatServiceLabel(date)} will be permanently removed.`,
+            confirmLabel: 'Remove attendance',
+        });
+        if (!confirmed) return;
+        try {
+            if (this.apiEnabled()) await Church2API.removeAttendance(memberId, date);
+            this.db.attendance = (this.db.attendance || []).filter((record) => record.memberId !== memberId || record.date !== date);
+            this.saveDB();
+            this.renderAttendance();
+            this.toast(`${name}'s attendance record was removed.`);
+        } catch (error) {
+            console.error('Attendance record removal failed:', error);
+            this.toast(`Could not remove the attendance record: ${error.message}`, 'error');
+        }
+    },
+
+    async removeAttendanceHeadcount(id) {
+        if (!this.isAdmin()) {
+            this.toast('Only an administrator can remove attendance totals.', 'error');
+            return;
+        }
+        const record = (this.db.attendanceHeadcounts || []).find((item) => item.id === id);
+        if (!record) return;
+        const confirmed = await this.confirmAction({
+            title: `Remove attendance total for ${record.date}?`,
+            body: `The total of ${Number(record.totalPresent).toLocaleString()} at ${record.branchName} will be permanently removed.`,
+            confirmLabel: 'Remove total',
+        });
+        if (!confirmed) return;
+        try {
+            if (this.apiEnabled()) await Church2API.removeAttendanceHeadcount(id);
+            this.db.attendanceHeadcounts = this.db.attendanceHeadcounts.filter((item) => item.id !== id);
+            this.saveDB();
+            this.renderAttendanceHeadcounts(this.session.currentBranch);
+            this.toast('Attendance total removed.');
+        } catch (error) {
+            console.error('Attendance total removal failed:', error);
+            this.toast(`Could not remove the attendance total: ${error.message}`, 'error');
+        }
+    },
+
+    async handleSaveAttendanceHeadcount() {
+        if (!this.isAdmin()) {
+            this.toast('Only an administrator can record the service headcount.', 'error');
+            return;
+        }
+        const form = document.getElementById('attendance-headcount-form');
+        const submitButton = form.querySelector('[type="submit"]');
+        const date = document.getElementById('attendance-headcount-date').value;
+        const branchId = document.getElementById('attendance-headcount-branch').value;
+        const totalPresent = Number(document.getElementById('attendance-headcount-total').value);
+        const branch = this.db.branches.find((item) => item.id === branchId);
+        if (!date || !branch || !Number.isSafeInteger(totalPresent) || totalPresent < 0 || totalPresent > 1000000) {
+            this.toast('Choose a service date and campus, then enter a whole-number headcount from 0 to 1,000,000.', 'error');
+            return;
+        }
+
+        submitButton.disabled = true;
+        submitButton.textContent = 'Saving…';
+        try {
+            const details = { date, branchId, totalPresent };
+            const saved = this.apiEnabled()
+                ? await Church2API.setAttendanceHeadcount(details)
+                : { id: `ah_${branchId}_${date}`, ...details, branchName: branch.name };
+            this.db.attendanceHeadcounts = this.db.attendanceHeadcounts || [];
+            const existingIndex = this.db.attendanceHeadcounts.findIndex((record) => record.branchId === saved.branchId && record.date === saved.date);
+            if (existingIndex >= 0) this.db.attendanceHeadcounts.splice(existingIndex, 1, saved);
+            else this.db.attendanceHeadcounts.push(saved);
+            this.saveDB();
+            document.getElementById('attendance-headcount-total').value = '';
+            this.renderAttendanceHeadcounts(this.session.currentBranch);
+            this.toast(`Attendance total saved: ${saved.totalPresent.toLocaleString()} present at ${saved.branchName}.`);
+        } catch (error) {
+            console.error('Attendance headcount save failed:', error);
+            this.toast(`Could not save the attendance total: ${error.message}`, 'error');
+        } finally {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Save attendance total';
+        }
+    },
+
     // How the congregation travelled to the selected service. Useful for
     // planning parking, boda bays and walking-distance outreach.
     renderArrivalSummary(members, serviceDate) {
         const el = document.getElementById('attendance-arrival');
         if (!el) return;
         const records = (this.db.attendance || []).filter(
-            (a) => a.date === serviceDate && a.present && members.some((m) => m.id === a.memberId));
+            (a) => a.date === serviceDate && a.present && members.some((m) => m.id === a.memberId)
+        );
         if (!records.length) {
             el.innerHTML = '<h4>How they arrived</h4><p class="muted-italic" style="font-size:0.78rem;">Nobody checked in yet for this service.</p>';
             return;
@@ -1501,7 +1804,7 @@ const ChurchApp = {
             } else {
                 this.db.attendance.push({
                     id: `att_${m.id}_${serviceDate}`, memberId: m.id, branchId: m.branchId,
-                    date: serviceDate, present, arrivalMode: '',
+                    date: serviceDate, present: true, arrivalMode: '',
                 });
             }
             this.apiWrite(() => Church2API.setAttendance({ memberId: m.id, date: serviceDate, present }));
@@ -1629,15 +1932,18 @@ const ChurchApp = {
     renderFollowUps() {
         const branchId = this.session.currentBranch;
         const inScope = (m) => (!branchId || branchId === 'global') ? true : m.branchId === branchId;
-        const items = (this.db.followUps || []).filter(inScope);
+        const search = (this.session.followUpSearch || '').trim().toLocaleLowerCase();
+        const items = (this.db.followUps || []).filter(inScope).filter((item) =>
+            !search || `${item.name || ''} ${item.owner || ''} ${item.note || ''}`.toLocaleLowerCase().includes(search)
+        );
         const board = document.getElementById('followup-board');
         if (!board) return;
 
         const stageMeta = {
-            'New Guest': { icon: '👋', tone: 'guest' },
-            'Contacted': { icon: '📞', tone: 'contacted' },
-            'Connected': { icon: '🤝', tone: 'connected' },
-            'Member': { icon: '⭐', tone: 'member' }
+            'New Guest': { icon: '<circle cx="8" cy="6" r="3"/><path d="M2.5 17c.5-3.4 2.3-5.2 5.5-5.2s5 1.8 5.5 5.2M15 5v6M12 8h6"/>', tone: 'guest' },
+            'Contacted': { icon: '<path d="M5 2.8h3l1.5 4-2 1.5a13 13 0 0 0 4.2 4.2l1.5-2 4 1.5v3c0 1-.8 1.8-1.8 1.8A13.8 13.8 0 0 1 3.2 4.6C3.2 3.6 4 2.8 5 2.8Z"/>', tone: 'contacted' },
+            'Connected': { icon: '<circle cx="6" cy="10" r="3"/><circle cx="14" cy="6" r="3"/><circle cx="14" cy="14" r="3"/><path d="m8.5 8.5 3-1.5m-3 4.5 3 1.5"/>', tone: 'connected' },
+            'Member': { icon: '<path d="m10 2.5 2.3 4.7 5.2.8-3.8 3.7.9 5.2-4.6-2.5-4.6 2.5.9-5.2-3.8-3.7 5.2-.8z"/>', tone: 'member' }
         };
 
         board.innerHTML = this.FOLLOWUP_STAGES.map((stage, sIdx) => {
@@ -1645,28 +1951,71 @@ const ChurchApp = {
             const cards = inStage.map(i => {
                 const canBack = sIdx > 0;
                 const canFwd = sIdx < this.FOLLOWUP_STAGES.length - 1;
+                const campus = this.db.branches.find(b => b.id === i.branchId);
+                const actions = `${canBack ? `<button type="button" class="followup-move followup-move-back" aria-label="Move ${esc(i.name)} back to ${esc(this.FOLLOWUP_STAGES[sIdx - 1])}" onclick="ChurchApp.moveFollowUp('${esc(i.id)}', -1)">
+                            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10H4m0 0 5-5m-5 5 5 5"/></svg>
+                        </button>` : ''}
+                        ${canFwd ? `<button type="button" class="followup-move fwd" aria-label="Move ${esc(i.name)} to ${esc(this.FOLLOWUP_STAGES[sIdx + 1])}" onclick="ChurchApp.moveFollowUp('${esc(i.id)}', 1)">
+                            <span>Move to ${esc(this.FOLLOWUP_STAGES[sIdx + 1])}</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5"/></svg>
+                        </button>` : '<span class="followup-complete">Membership reached</span>'}
+                        ${this.canManageMinistryItems() ? `<button type="button" class="followup-remove" aria-label="Remove ${esc(i.name)} from follow-ups" onclick="ChurchApp.removeFollowUp('${esc(i.id)}')">
+                            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5h12m-10 0 .7 11h4.6L12 5M8 5V3h4v2m-3 3v5m2-5v5"/></svg>
+                        </button>` : ''}`;
                 return `<div class="followup-card">
                     <div class="followup-card-top">
                         <strong>${esc(i.name)}</strong>
-                        <span class="branch-pill badge-${esc(i.branchId)}">${esc((this.db.branches.find(b => b.id === i.branchId) || {}).name || '')}</span>
+                        ${branchId === 'global' && campus ? `<span class="branch-pill badge-${esc(i.branchId)}">${esc(campus.name)}</span>` : ''}
                     </div>
-                    ${i.owner ? `<div class="followup-owner"><svg class="inline-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20c0-3.4 2.9-5.4 6.5-5.4s6.5 2 6.5 5.4"/></svg> ${esc(i.owner)}</div>` : ''}
+                    ${i.owner ? `<div class="followup-owner"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="6" r="3"/><path d="M2.5 17c.5-3.4 2.3-5.2 5.5-5.2s5 1.8 5.5 5.2"/></svg><span>${esc(i.owner)}</span></div>` : ''}
                     ${i.note ? `<p class="followup-note">${esc(i.note)}</p>` : ''}
-                    <div class="followup-actions">
-                        <button class="followup-move" ${canBack ? '' : 'disabled'} aria-label="Move ${esc(i.name)} back" onclick="ChurchApp.moveFollowUp('${esc(i.id)}', -1)">←</button>
-                        <button class="followup-move fwd" ${canFwd ? '' : 'disabled'} aria-label="Advance ${esc(i.name)}" onclick="ChurchApp.moveFollowUp('${esc(i.id)}', 1)">${canFwd ? 'Advance →' : 'Assimilated ✓'}</button>
-                    </div>
+                    <div class="followup-actions">${actions}</div>
                 </div>`;
-            }).join('') || '<p class="followup-empty muted-italic">Empty</p>';
+            }).join('') || `<p class="followup-empty">${search
+                ? 'No matching people in this stage.'
+                : stage === 'New Guest' && items.length === 0
+                    ? 'No guest follow-ups yet. Add the first one above.'
+                    : `No people in ${esc(stage.toLowerCase())} yet.`}</p>`;
 
             return `<div class="followup-col tone-${stageMeta[stage].tone}">
                 <div class="followup-col-head">
-                    <span>${stageMeta[stage].icon} ${esc(stage)}</span>
-                    <span class="followup-count">${inStage.length}</span>
+                    <h4><svg viewBox="0 0 20 20" aria-hidden="true">${stageMeta[stage].icon}</svg>${esc(stage)}</h4>
+                    <span class="followup-count" aria-label="${inStage.length} ${inStage.length === 1 ? 'person' : 'people'}">${inStage.length}</span>
                 </div>
                 <div class="followup-col-body">${cards}</div>
             </div>`;
         }).join('');
+
+        const campusSelect = document.getElementById('followup-branch');
+        const addForm = document.getElementById('add-followup-form');
+        const isHq = this.session.currentRole === 'hq_admin';
+        if (campusSelect) {
+            const selectedBranch = branchId === 'global' ? '' : branchId;
+            campusSelect.innerHTML = `${branchId === 'global' ? '<option value="">Choose a campus</option>' : ''}${this.db.branches.map((branch) =>
+                `<option value="${esc(branch.id)}"${branch.id === selectedBranch ? ' selected' : ''}>${esc(branch.name)}</option>`
+            ).join('')}`;
+            campusSelect.disabled = !isHq;
+        }
+        if (addForm) addForm.hidden = this.session.currentRole === 'member';
+
+        const searchInput = document.getElementById('followup-search');
+        if (searchInput) {
+            searchInput.value = this.session.followUpSearch || '';
+            searchInput.oninput = (event) => {
+                this.session.followUpSearch = event.target.value;
+                const cursor = event.target.selectionStart;
+                this.renderFollowUps();
+                const refreshedSearch = document.getElementById('followup-search');
+                refreshedSearch?.focus();
+                refreshedSearch?.setSelectionRange(cursor, cursor);
+            };
+        }
+        const results = document.getElementById('followup-results-count');
+        if (results) {
+            const total = (this.db.followUps || []).filter(inScope).length;
+            results.textContent = search
+                ? `${items.length} of ${total} follow-ups`
+                : `${total} ${total === 1 ? 'follow-up' : 'follow-ups'}`;
+        }
 
         const form = document.getElementById('add-followup-form');
         if (form) {
@@ -1675,7 +2024,12 @@ const ChurchApp = {
                 const name = document.getElementById('followup-name').value.trim();
                 const owner = document.getElementById('followup-owner').value.trim();
                 if (!name) return;
-                const targetBranch = (branchId && branchId !== 'global') ? branchId : 'b1';
+                const targetBranch = isHq ? campusSelect.value : branchId;
+                if (!targetBranch) {
+                    this.toast('Choose a campus before adding the follow-up.', 'error');
+                    campusSelect.focus();
+                    return;
+                }
                 const item = {
                     id: `fu_${Date.now()}`,
                     name, owner: owner || 'Unassigned',
@@ -1687,6 +2041,7 @@ const ChurchApp = {
                 this.saveDB();
                 this.apiWrite(() => Church2API.createFollowup({ name, owner: item.owner, branchId: targetBranch }), (srv) => { if (srv && srv.id) item.id = srv.id; });
                 form.reset();
+                this.session.followUpSearch = '';
                 this.renderFollowUps();
                 this.toast(`${name} added to the assimilation pipeline.`);
             };
@@ -1706,6 +2061,31 @@ const ChurchApp = {
         if (item.stage === 'Member') this.toast(`🎉 ${item.name} is now a committed member!`);
     },
 
+    async removeFollowUp(id) {
+        if (!this.canManageMinistryItems()) {
+            this.toast('You do not have permission to remove guest follow-ups.', 'error');
+            return;
+        }
+        const item = (this.db.followUps || []).find((followUp) => followUp.id === id);
+        if (!item) return;
+        const confirmed = await this.confirmAction({
+            title: `Remove ${item.name}?`,
+            body: 'This guest follow-up and its place in the pipeline will be permanently removed.',
+            confirmLabel: 'Remove follow-up',
+        });
+        if (!confirmed) return;
+        try {
+            if (this.apiEnabled()) await Church2API.removeFollowup(id);
+            this.db.followUps = this.db.followUps.filter((followUp) => followUp.id !== id);
+            this.saveDB();
+            this.renderFollowUps();
+            this.toast(`${item.name} removed from follow-ups.`);
+        } catch (error) {
+            console.error('Follow-up removal failed:', error);
+            this.toast(`Could not remove ${item.name}: ${error.message}`, 'error');
+        }
+    },
+
     // Panel: Small Groups (admin)
     renderGroups() {
         const branchId = this.session.currentBranch;
@@ -1718,19 +2098,22 @@ const ChurchApp = {
                 const count = (g.memberIds || []).length;
                 const roster = (g.memberIds || []).map(id => {
                     const m = this.db.members.find(mm => mm.id === id);
-                    return m ? `${m.firstName} ${m.lastName}` : null;
+                    return m ? `<span class="group-member-pill">${esc(m.firstName)} ${esc(m.lastName)}${this.canManageMinistryItems() ? ` <button type="button" class="remove-vol-btn" aria-label="Remove ${esc(m.firstName)} ${esc(m.lastName)} from ${esc(g.name)}" onclick="ChurchApp.removeGroupMember('${esc(g.id)}', '${esc(m.id)}')">×</button>` : ''}</span>` : null;
                 }).filter(Boolean);
                 return `<div class="group-card">
                     <div class="group-card-head">
                         <h4>${esc(g.name)}</h4>
-                        <span class="group-count"><svg class="inline-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8.2" cy="9" r="3"/><circle cx="16.6" cy="10" r="2.3"/><path d="M2.6 19c0-3 2.4-4.9 5.6-4.9 1.6 0 3 .5 4 1.3"/><path d="M14.6 14.7c2.6.2 4.8 1.9 4.8 4.6"/></svg> ${count}</span>
+                        <div class="group-card-controls">
+                            <span class="group-count"><svg class="inline-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8.2" cy="9" r="3"/><circle cx="16.6" cy="10" r="2.3"/><path d="M2.6 19c0-3 2.4-4.9 5.6-4.9 1.6 0 3 .5 4 1.3"/><path d="M14.6 14.7c2.6.2 4.8 1.9 4.8 4.6"/></svg> ${count}</span>
+                            ${this.canManageMinistryItems() ? `<button type="button" class="action-btn-sm action-btn-danger" onclick="ChurchApp.removeGroup('${esc(g.id)}')" aria-label="Remove ${esc(g.name)} group">Remove</button>` : ''}
+                        </div>
                     </div>
                     <div class="group-meta">
                         <span class="branch-pill badge-${esc(g.branchId)}">${esc(campus)}</span>
                         <span class="group-schedule"><svg class="inline-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.4"/><path d="M3.5 9.5h17M8 3.4v3.2M16 3.4v3.2"/></svg> ${esc(g.schedule || 'TBD')}</span>
                     </div>
                     ${g.description ? `<p class="group-desc">${esc(g.description)}</p>` : ''}
-                    <div class="group-roster">${roster.length ? roster.map(n => `<span class="group-member-pill">${esc(n)}</span>`).join('') : '<span class="muted-italic">No members yet</span>'}</div>
+                    <div class="group-roster">${roster.length ? roster.join('') : '<span class="muted-italic">No members yet</span>'}</div>
                 </div>`;
             }).join('') || '<p class="muted-italic" style="margin-top:12px;">No groups for this campus yet.</p>';
         }
@@ -1759,45 +2142,35 @@ const ChurchApp = {
         }
     },
 
-    // Mobile: browse & self-join small groups (logged-in member m1)
-    renderMobileGroups() {
-        const container = document.getElementById('mobile-groups-list');
-        if (!container) return;
-        const me = this.db.members.find(m => m.id === 'm1');
-        const myBranch = me ? me.branchId : 'b1';
-        const groups = (this.db.groups || []).filter(g => g.branchId === myBranch);
-
-        container.innerHTML = groups.map(g => {
-            const joined = (g.memberIds || []).includes('m1');
-            return `<div class="mobile-group-card">
-                <div class="mobile-group-info">
-                    <strong>${esc(g.name)}</strong>
-                    <span>🗓️ ${esc(g.schedule || 'TBD')} · ${(g.memberIds || []).length} members</span>
-                </div>
-                <button class="mobile-group-btn${joined ? ' joined' : ''}" onclick="ChurchApp.toggleGroupJoin('${esc(g.id)}')">${joined ? 'Joined ✓' : 'Join'}</button>
-            </div>`;
-        }).join('') || '<p class="muted-italic" style="font-size:0.72rem;">No groups at your campus yet.</p>';
-    },
-
-    toggleGroupJoin(groupId) {
-        const group = (this.db.groups || []).find(g => g.id === groupId);
-        if (!group) return;
-        group.memberIds = group.memberIds || [];
-        const idx = group.memberIds.indexOf('m1');
-        if (idx >= 0) {
-            group.memberIds.splice(idx, 1);
-            this.toast(`Left ${group.name}.`, 'info');
-        } else {
-            group.memberIds.push('m1');
-            this.toast(`Joined ${group.name}! See you there. 🙌`);
+    async removeGroupMember(groupId, memberId) {
+        if (!this.canManageMinistryItems()) {
+            this.toast('You do not have permission to change group membership.', 'error');
+            return;
         }
-        this.saveDB();
-        this.apiWrite(() => Church2API.toggleGroupMember(group.id, 'm1'));
-        this.renderMobileGroups();
+        const group = (this.db.groups || []).find((item) => item.id === groupId);
+        const member = this.db.members.find((item) => item.id === memberId);
+        if (!group || !member || !(group.memberIds || []).includes(memberId)) return;
+        const confirmed = await this.confirmAction({
+            title: `Remove ${member.firstName} ${member.lastName} from ${group.name}?`,
+            body: 'The member profile will remain in the directory; only this group assignment will be removed.',
+            confirmLabel: 'Remove from group',
+        });
+        if (!confirmed) return;
+        try {
+            if (this.apiEnabled()) await Church2API.removeGroupMember(groupId, memberId);
+            group.memberIds = group.memberIds.filter((id) => id !== memberId);
+            this.saveDB();
+            this.renderGroups();
+            this.toast(`${member.firstName} was removed from ${group.name}.`);
+        } catch (error) {
+            console.error('Group membership removal failed:', error);
+            this.toast(`Could not remove ${member.firstName} from ${group.name}: ${error.message}`, 'error');
+        }
     },
 
     // 8. Panel: Member Directory View Rendering
     renderMemberDirectory() {
+        this.renderMemberGroupOptions();
         const query = document.getElementById('member-search-input').value.toLowerCase();
         const branchFilter = document.getElementById('member-branch-filter').value;
         const tbody = document.getElementById('member-directory-tbody');
@@ -1855,7 +2228,294 @@ const ChurchApp = {
         });
 
         if (filteredMembers.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #9ca3af; padding: 30px;">No members found matching the criteria.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 30px;">No members found matching the criteria.</td></tr>`;
+        }
+    },
+
+    renderMemberGroupOptions() {
+        const container = document.getElementById('member-group-options');
+        const branchSelect = document.getElementById('member-branch-select');
+        if (!container || !branchSelect) return;
+        const branchId = branchSelect.value;
+        const groups = (this.db.groups || []).filter((group) => group.branchId === branchId);
+        container.innerHTML = groups.length
+            ? groups.map((group) => `<label class="member-group-option">
+                <input type="checkbox" name="member-groups" value="${esc(group.id)}">
+                <span>${esc(group.name)}</span>
+            </label>`).join('')
+            : '<p class="member-group-empty">No groups exist at this campus yet.</p>';
+    },
+
+    resetMemberImport() {
+        this.memberImportState = null;
+        const fileInput = document.getElementById('member-csv-file');
+        const review = document.getElementById('member-import-review');
+        const submit = document.getElementById('member-import-submit');
+        if (fileInput) fileInput.value = '';
+        if (fileInput) fileInput.disabled = false;
+        const cancel = document.getElementById('member-import-cancel');
+        if (cancel) cancel.disabled = false;
+        if (review) review.hidden = true;
+        if (submit) {
+            submit.disabled = true;
+            submit.textContent = 'Import valid members';
+        }
+    },
+
+    downloadMemberCsvTemplate() {
+        const csv = [
+            'first_name,last_name,email,phone,volunteer_skills,groups,marital_status,background,expectations',
+        ].join('\r\n');
+        const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'church-members-template.csv';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
+
+    async handleMemberCsvSelected(file) {
+        this.resetMemberImport();
+        if (!file) return;
+        const review = document.getElementById('member-import-review');
+        const summary = document.getElementById('member-import-summary');
+        review.hidden = false;
+        if (!this.isAdmin()) {
+            summary.textContent = 'Only an administrator can import members.';
+            return;
+        }
+        if (!file.name.toLowerCase().endsWith('.csv') || file.size > 5 * 1024 * 1024) {
+            summary.textContent = file.size > 5 * 1024 * 1024
+                ? 'This file is larger than 5 MB. Split it into smaller CSV files and try again.'
+                : 'Choose a .csv file to import.';
+            return;
+        }
+
+        try {
+            const records = parseCsvRecords((await file.text()).replace(/^\uFEFF/, ''));
+            if (records.length < 2) throw new Error('The CSV must include a header and at least one member row.');
+            if (records.length - 1 > 500) throw new Error('This file contains more than 500 member rows. Split it into smaller CSV files.');
+
+            const normalizeHeader = (header) => header.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const aliases = {
+                firstName: ['firstname', 'givenname', 'forename'],
+                lastName: ['lastname', 'surname', 'familyname'],
+                fullName: ['fullname', 'name'],
+                email: ['email', 'emailaddress'],
+                phone: ['phone', 'phonenumber', 'mobile', 'mobilenumber', 'mobilephone'],
+                volunteer_skills: ['volunteerskills', 'volunteeringskills', 'skills'],
+                groups: ['groups', 'group', 'groupnames', 'campusgroups'],
+                maritalStatus: ['maritalstatus'],
+                background: ['background', 'beforejoining'],
+                expectations: ['expectations'],
+            };
+            const headers = records[0].map(normalizeHeader);
+            const columns = Object.fromEntries(Object.entries(aliases).map(([key, names]) => [
+                key,
+                headers.findIndex((header) => names.includes(header)),
+            ]));
+            if ((columns.firstName < 0 || columns.lastName < 0) && columns.fullName < 0) {
+                throw new Error('Add first_name and last_name columns, or a single full_name column.');
+            }
+
+            const selectedBranch = document.getElementById('member-branch-select').value;
+            const existingEmails = new Set(this.db.members
+                .filter((member) => member.branchId === selectedBranch && member.email)
+                .map((member) => member.email.trim().toLowerCase()));
+            const seenEmails = new Set();
+            const rows = records.slice(1).map((record, index) => {
+                const cell = (column) => column >= 0 ? String(record[column] || '').trim() : '';
+                let firstName = cell(columns.firstName);
+                let lastName = cell(columns.lastName);
+                if ((!firstName || !lastName) && columns.fullName >= 0) {
+                    const nameParts = cell(columns.fullName).split(/\s+/).filter(Boolean);
+                    firstName = firstName || nameParts.shift() || '';
+                    lastName = lastName || nameParts.join(' ');
+                }
+                const email = cell(columns.email);
+                const phone = cell(columns.phone);
+                const skillsText = cell(columns.volunteer_skills);
+                const groupNames = cell(columns.groups).split(/[;|]/).map((name) => name.trim()).filter(Boolean);
+                const campusGroups = this.db.groups.filter((group) => group.branchId === selectedBranch);
+                const groupIds = [];
+                let groupError = '';
+                groupNames.forEach((name) => {
+                    const matches = campusGroups.filter((group) => group.name.trim().toLowerCase() === name.toLowerCase());
+                    if (matches.length !== 1) {
+                        groupError = matches.length
+                            ? `More than one campus group is named "${name}"`
+                            : `Campus group "${name}" was not found`;
+                    } else if (!groupIds.includes(matches[0].id)) {
+                        groupIds.push(matches[0].id);
+                    }
+                });
+                const member = {
+                    rowNumber: index + 2,
+                    firstName,
+                    lastName,
+                    email,
+                    phone,
+                    volunteer_skills: skillsText ? skillsText.split(/[;|]/).map((skill) => skill.trim()).filter(Boolean) : [],
+                    groupNames,
+                    groupIds,
+                    maritalStatus: cell(columns.maritalStatus),
+                    background: cell(columns.background),
+                    expectations: cell(columns.expectations),
+                };
+                const extraCells = record.slice(records[0].length).some((value) => value.trim());
+                let error = '';
+                if (extraCells) error = 'This row has values without matching column headers';
+                else if (!firstName || !lastName) error = 'First and last name are required';
+                else if (firstName.length > 100 || lastName.length > 100) error = 'Names must be 100 characters or fewer';
+                else if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) error = 'Enter a valid email address';
+                else if (phone.length > 40) error = 'Phone number must be 40 characters or fewer';
+                else if (member.volunteer_skills.length > 30 || member.volunteer_skills.some((skill) => skill.length > 80)) error = 'Each row may contain up to 30 skills of 80 characters or fewer';
+                else if (member.maritalStatus.length > 80 || member.background.length > 5000 || member.expectations.length > 5000) error = 'A member detail exceeds its allowed length';
+                else if (groupError) error = groupError;
+                else if (email && existingEmails.has(email.toLowerCase())) error = 'This email already belongs to a member at the selected campus';
+                else if (email && seenEmails.has(email.toLowerCase())) error = 'This email appears more than once in the CSV';
+                if (email && !error) seenEmails.add(email.toLowerCase());
+                return { ...member, error };
+            });
+
+            this.memberImportState = { fileName: file.name, branchId: selectedBranch, rows, running: false, imported: false };
+            this.renderMemberImportPreview();
+        } catch (error) {
+            console.error('Member CSV preview failed:', error);
+            summary.textContent = error.message || 'Could not read this CSV file.';
+        }
+    },
+
+    renderMemberImportPreview() {
+        const state = this.memberImportState;
+        if (!state) return;
+        const review = document.getElementById('member-import-review');
+        const summary = document.getElementById('member-import-summary');
+        const preview = document.getElementById('member-import-preview');
+        const submit = document.getElementById('member-import-submit');
+        const fileInput = document.getElementById('member-csv-file');
+        const cancel = document.getElementById('member-import-cancel');
+        const validRows = state.rows.filter((row) => !row.error);
+        const errorCount = state.rows.length - validRows.length;
+        summary.textContent = state.imported
+            ? `Imported ${state.importedCount} member${state.importedCount === 1 ? '' : 's'} from ${state.fileName}. ${errorCount} row${errorCount === 1 ? '' : 's'} skipped.`
+            : `${state.fileName}: ${validRows.length} ready to import, ${errorCount} need attention. Duplicate emails at this campus are skipped.`;
+        preview.innerHTML = state.rows.map((row) => `
+            <tr>
+                <td>${row.rowNumber}</td>
+                <td>${esc(`${row.firstName} ${row.lastName}`.trim() || '—')}</td>
+                <td>${esc(row.email || '—')}</td>
+                <td>${esc(row.phone || '—')}</td>
+                <td>${esc(row.groupNames.join(', ') || '—')}</td>
+                <td class="${row.error ? 'member-import-row-error' : 'member-import-row-ready'}">${esc(row.error || (state.imported ? 'Imported' : 'Ready'))}</td>
+            </tr>`).join('');
+        review.hidden = false;
+        fileInput.disabled = state.running;
+        cancel.disabled = state.running;
+        submit.disabled = state.running || state.imported || validRows.length === 0
+            || !state.branchId || state.branchId !== document.getElementById('member-branch-select').value;
+        submit.textContent = state.running ? 'Importing…' : 'Import valid members';
+    },
+
+    async importMembersFromCsv() {
+        const state = this.memberImportState;
+        if (!state || state.running || state.imported) return;
+        if (!this.isAdmin()) {
+            this.toast('Only an administrator can import members.', 'error');
+            return;
+        }
+        if (state.branchId !== document.getElementById('member-branch-select').value) {
+            this.toast('The selected campus changed. Choose the CSV again to review it for that campus.', 'error');
+            return;
+        }
+        const validRows = state.rows.filter((row) => !row.error);
+        if (!validRows.length) return;
+        state.running = true;
+        this.renderMemberImportPreview();
+        try {
+            let importedMembers;
+            let serverErrors = [];
+            if (this.apiEnabled()) {
+                const result = await Church2API.importMembers({
+                    branchId: state.branchId,
+                    members: validRows.map(({ error, ...member }) => member),
+                });
+                importedMembers = result.members || [];
+                serverErrors = result.errors || [];
+            } else {
+                const branch = this.db.branches.find((item) => item.id === state.branchId);
+                importedMembers = validRows.map((member, index) => ({
+                    id: `m_import_${Date.now()}_${index}`,
+                    importRowNumber: member.rowNumber,
+                    branchId: state.branchId,
+                    branchName: branch?.name || '',
+                    firstName: member.firstName,
+                    lastName: member.lastName,
+                    email: member.email,
+                    phone: member.phone,
+                    volunteer_skills: member.volunteer_skills,
+                    maritalStatus: member.maritalStatus,
+                    background: member.background,
+                    expectations: member.expectations,
+                    engagement_score: 60,
+                }));
+            }
+            const serverErrorByRow = new Map(serverErrors.map((item) => [item.row, item.message]));
+            state.rows.forEach((row) => {
+                if (!row.error && serverErrorByRow.has(row.rowNumber)) row.error = serverErrorByRow.get(row.rowNumber);
+            });
+            importedMembers.forEach((imported) => {
+                const { importRowNumber, ...member } = imported;
+                const sourceRow = state.rows.find((row) => row.rowNumber === importRowNumber);
+                this.db.members.push(member);
+                (sourceRow?.groupIds || []).forEach((groupId) => {
+                    const group = this.db.groups.find((item) => item.id === groupId);
+                    if (group) {
+                        group.memberIds = group.memberIds || [];
+                        if (!group.memberIds.includes(member.id)) group.memberIds.push(member.id);
+                    }
+                });
+            });
+            this.saveDB();
+            state.running = false;
+            state.imported = true;
+            state.importedCount = importedMembers.length;
+            this.renderMemberImportPreview();
+            this.renderMemberDirectory();
+            this.toast(`${importedMembers.length} member${importedMembers.length === 1 ? '' : 's'} imported${serverErrors.length ? `; ${serverErrors.length} row${serverErrors.length === 1 ? '' : 's'} skipped` : ''}.`);
+        } catch (error) {
+            console.error('Member CSV import failed:', error);
+            state.running = false;
+            this.renderMemberImportPreview();
+            this.toast(`Could not import members: ${error.message}`, 'error');
+        }
+    },
+
+    async removeGroup(groupId) {
+        if (!this.canManageMinistryItems()) {
+            this.toast('You do not have permission to remove groups.', 'error');
+            return;
+        }
+        const group = (this.db.groups || []).find((item) => item.id === groupId);
+        if (!group) return;
+        const confirmed = await this.confirmAction({
+            title: `Remove ${group.name}?`,
+            body: 'The group will be deleted and its member assignments cleared. Member profiles will remain.',
+            confirmLabel: 'Remove group',
+        });
+        if (!confirmed) return;
+        try {
+            if (this.apiEnabled()) await Church2API.removeGroup(groupId);
+            this.db.groups = this.db.groups.filter((item) => item.id !== groupId);
+            this.saveDB();
+            this.renderGroups();
+            this.renderMemberGroupOptions();
+            this.toast(`${group.name} group removed.`);
+        } catch (error) {
+            console.error('Group removal failed:', error);
+            this.toast(`Could not remove ${group.name}: ${error.message}`, 'error');
         }
     },
 
@@ -1917,12 +2577,12 @@ const ChurchApp = {
                     <div class="milestones-section">
                         <h4>Spiritual Milestones</h4>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
-                            ${member.spiritualMilestones.length > 0 ? member.spiritualMilestones.map(m => `<span class="milestone-pill">✨ ${esc(m)}</span>`).join('') : '<span class="muted-italic">No spiritual milestones logged.</span>'}
+                            ${(member.spiritualMilestones || []).length > 0 ? member.spiritualMilestones.map((milestone, index) => `<span class="milestone-pill">✨ ${esc(milestone)}${this.isAdmin() ? ` <button type="button" class="remove-vol-btn" aria-label="Remove milestone ${esc(milestone)}" onclick="ChurchApp.removeSpiritualMilestone('${esc(member.id)}', ${index})">×</button>` : ''}</span>`).join('') : '<span class="muted-italic">No spiritual milestones logged.</span>'}
                         </div>
-                        <div style="margin-top: 12px; display: flex; gap: 8px;">
+                        ${this.isAdmin() ? `<div style="margin-top: 12px; display: flex; gap: 8px;">
                             <input type="text" id="new-milestone-input" placeholder="e.g. Confirmed: 2026-07-11" class="form-control" style="width: auto; flex-grow: 1;" aria-label="New spiritual milestone">
                             <button class="btn btn-primary-gradient" onclick="ChurchApp.addSpiritualMilestone()">Add Milestone</button>
-                        </div>
+                        </div>` : ''}
                     </div>
 
                     <div style="margin-top: 20px;">
@@ -1946,7 +2606,7 @@ const ChurchApp = {
                                         <td><a href="#" onclick="ChurchApp.viewReceipt('${esc(d.id)}'); return false;">${esc(d.receiptNumber)}</a></td>
                                         <td>${esc(d.date)}</td>
                                         <td>${esc(d.category)}</td>
-                                        <td style="color: #10b981; font-weight: bold;">${money(parseFloat(d.amount))}</td>
+                                        <td style="color: #10b981; font-weight: bold; text-align: right;">${money(parseFloat(d.amount))}</td>
                                         <td>${esc(d.paymentMethod)}</td>
                                     </tr>
                                 `).join('')}
@@ -1960,21 +2620,62 @@ const ChurchApp = {
         this.openModal('member-detail-modal');
     },
 
-    addSpiritualMilestone() {
+    async addSpiritualMilestone() {
+        if (!this.isAdmin()) {
+            this.toast('Only an administrator can update spiritual milestones.', 'error');
+            return;
+        }
         const input = document.getElementById('new-milestone-input');
         if (!input || !input.value.trim()) return;
 
         const milestone = input.value.trim();
         const member = this.db.members.find(m => m.id === this.session.selectedMemberId);
-        if (member) {
-            member.spiritualMilestones.push(milestone);
-            // Boost engagement score slightly for milestone achievement
-            member.engagement_score = Math.min(member.engagement_score + 5, 100);
+        if (!member) return;
+        try {
+            const spiritualMilestones = [...(member.spiritualMilestones || []), milestone];
+            const saved = this.apiEnabled()
+                ? await Church2API.updateMemberMilestones(member.id, spiritualMilestones)
+                : { spiritualMilestones };
+            member.spiritualMilestones = saved.spiritualMilestones;
+            member.engagement_score = Math.min((Number(member.engagement_score) || 0) + 5, 100);
             this.saveDB();
-            
-            // Re-render
             this.viewMemberDetails(member.id);
             this.renderMemberDirectory();
+            this.toast('Spiritual milestone added.');
+        } catch (error) {
+            console.error('Spiritual milestone save failed:', error);
+            this.toast(`Could not save this milestone: ${error.message}`, 'error');
+        }
+    },
+
+    async removeSpiritualMilestone(memberId, index) {
+        if (!this.isAdmin()) {
+            this.toast('Only an administrator can remove spiritual milestones.', 'error');
+            return;
+        }
+        const member = this.db.members.find((item) => item.id === memberId);
+        const milestones = member?.spiritualMilestones || [];
+        if (!member || !Number.isInteger(index) || index < 0 || index >= milestones.length) return;
+        const milestone = milestones[index];
+        const confirmed = await this.confirmAction({
+            title: 'Remove this spiritual milestone?',
+            body: `"${milestone}" will be permanently removed from ${member.firstName} ${member.lastName}'s profile.`,
+            confirmLabel: 'Remove milestone',
+        });
+        if (!confirmed) return;
+        try {
+            const spiritualMilestones = milestones.filter((_, itemIndex) => itemIndex !== index);
+            const saved = this.apiEnabled()
+                ? await Church2API.updateMemberMilestones(member.id, spiritualMilestones)
+                : { spiritualMilestones };
+            member.spiritualMilestones = saved.spiritualMilestones;
+            this.saveDB();
+            this.viewMemberDetails(member.id);
+            this.renderMemberDirectory();
+            this.toast('Spiritual milestone removed.');
+        } catch (error) {
+            console.error('Spiritual milestone removal failed:', error);
+            this.toast(`Could not remove this milestone: ${error.message}`, 'error');
         }
     },
 
@@ -1999,18 +2700,26 @@ const ChurchApp = {
         });
         if (!confirmed) return;
 
-        this.db.members = this.db.members.filter((m) => m.id !== memberId);
-        this.db.attendance = (this.db.attendance || []).filter((a) => a.memberId !== memberId);
-        (this.db.groups || []).forEach((g) => {
-            g.memberIds = (g.memberIds || []).filter((id) => id !== memberId);
-        });
-        this.saveDB();
-        this.apiWrite(() => Church2API.removeMember(memberId));
-        this.toast(`${name} removed from the roll.`);
-        this.renderAll();
+        try {
+            if (this.apiEnabled()) await Church2API.removeMember(memberId);
+            this.db.members = this.db.members.filter((m) => m.id !== memberId);
+            this.db.attendance = (this.db.attendance || []).filter((a) => a.memberId !== memberId);
+            (this.db.groups || []).forEach((g) => {
+                g.memberIds = (g.memberIds || []).filter((id) => id !== memberId);
+            });
+            (this.db.events || []).forEach((event) => {
+                event.volunteersSignedUp = (event.volunteersSignedUp || []).filter((id) => id !== memberId);
+            });
+            this.saveDB();
+            this.toast(`${name} removed from the roll.`);
+            this.renderAll();
+        } catch (error) {
+            console.error('Member removal failed:', error);
+            this.toast(`Could not remove ${name}: ${error.message}`, 'error');
+        }
     },
 
-    handleCreateMember() {
+    async handleCreateMember() {
         // Enforced here as well as in the UI: hiding the form is presentation,
         // this is the rule.
         if (!this.isAdmin()) {
@@ -2026,47 +2735,87 @@ const ChurchApp = {
         const maritalStatus = document.getElementById('member-marital-status').value;
         const background = document.getElementById('member-background').value.trim();
         const expectations = document.getElementById('member-expectations').value.trim();
+        const accountRole = document.getElementById('member-account-role').value;
+        const createAccount = Boolean(accountRole);
+        const accountPassword = document.getElementById('member-account-password').value;
+        const groupIds = [...document.querySelectorAll('#member-group-options input[name="member-groups"]:checked')]
+            .map((input) => input.value);
 
         const branchObj = this.db.branches.find(b => b.id === branchId);
+        if (!branchObj) {
+            this.toast('Choose a valid campus before adding the member.', 'error');
+            return;
+        }
+        if (createAccount && (!this.apiEnabled() || !email || accountPassword.length < 12)) {
+            this.toast(this.apiEnabled()
+                ? 'A valid email and temporary password of at least 12 characters are required for system access.'
+                : 'System accounts can only be created while connected to the server.', 'error');
+            return;
+        }
+        if (createAccount && accountRole === 'branch_admin' && this.session.currentRole !== 'hq_admin') {
+            this.toast('Only an HQ administrator can assign the branch administrator role.', 'error');
+            return;
+        }
         const skillsArray = skillsText ? skillsText.split(',').map(s => s.trim()) : [];
 
-        const newMember = {
-            id: `m_${Date.now()}`,
-            branchId: branchId,
-            branchName: branchObj.name,
-            firstName,
-            lastName,
-            email,
-            phone,
-            familyId: `fam_${lastName.toLowerCase()}_${Math.floor(Math.random() * 1000)}`,
-            familyRole: 'Single',
-            spiritualMilestones: ['Registered: ' + new Date().toISOString().split('T')[0]],
-            volunteer_skills: skillsArray,
-            engagement_score: 50,
-            // Captured at registration so the administrator has context on who
-            // this person is, not just how to reach them.
-            maritalStatus,
-            background,
-            expectations
-        };
-
-        this.db.members.push(newMember);
-        this.saveDB();
-        this.apiWrite(
-            () => Church2API.createMember({ firstName, lastName, email, phone, volunteer_skills: skillsArray,
-                branchId, maritalStatus, background, expectations }),
-            (srv) => { if (srv && srv.id) newMember.id = srv.id; }
-        );
-        document.getElementById('add-member-form').reset();
-
-        // Notification simulation
-        this.toast(`${firstName} ${lastName} enrolled in ${branchObj.name}.`);
-        this.renderMemberDirectory();
+        const form = document.getElementById('add-member-form');
+        const submitButton = form.querySelector('[type="submit"]');
+        submitButton.disabled = true;
+        submitButton.textContent = 'Adding member…';
+        try {
+            const details = {
+                firstName, lastName, email, phone, volunteer_skills: skillsArray, branchId,
+                maritalStatus, background, expectations, groupIds,
+                account: createAccount ? { role: accountRole, password: accountPassword } : null,
+            };
+            const saved = this.apiEnabled()
+                ? await Church2API.createMember(details)
+                : null;
+            const newMember = saved || {
+                id: `m_${Date.now()}`,
+                branchId,
+                branchName: branchObj.name,
+                firstName,
+                lastName,
+                email,
+                phone,
+                familyId: `fam_${lastName.toLowerCase()}_${Math.floor(Math.random() * 1000)}`,
+                familyRole: 'Single',
+                spiritualMilestones: ['Registered: ' + new Date().toISOString().split('T')[0]],
+                volunteer_skills: skillsArray,
+                engagement_score: 50,
+                maritalStatus,
+                background,
+                expectations,
+            };
+            this.db.members.push(newMember);
+            groupIds.forEach((groupId) => {
+                const group = this.db.groups.find((item) => item.id === groupId);
+                if (group && !group.memberIds.includes(newMember.id)) group.memberIds.push(newMember.id);
+            });
+            this.saveDB();
+            form.reset();
+            document.getElementById('member-account-fields').hidden = true;
+            document.getElementById('member-account-password').required = false;
+            document.getElementById('member-account-role').setAttribute('aria-expanded', 'false');
+            this.toast(createAccount
+                ? `${firstName} ${lastName} added with ${accountRole.replace('_', ' ')} system access. Share the temporary password securely.`
+                : `${firstName} ${lastName} enrolled in ${branchObj.name}.`);
+            this.renderMemberDirectory();
+            this.renderGroups();
+        } catch (error) {
+            console.error('Member creation failed:', error);
+            this.toast(`Could not add ${firstName} ${lastName}: ${error.message}`, 'error');
+        } finally {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Add Member to Registry';
+        }
     },
 
     // 10. Panel: Financials Ledger Rendering
     renderFinancials() {
         const branchId = this.session.currentBranch;
+        this.renderCollectionSessions(branchId);
         const tbody = document.getElementById('financials-tbody');
         tbody.innerHTML = '';
 
@@ -2079,22 +2828,23 @@ const ChurchApp = {
         filteredTx.forEach(t => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td><span class="receipt-no" style="font-family: monospace; font-weight: bold; color: #93c5fd;">${esc(t.receiptNumber)}</span></td>
+                <td><span class="receipt-no" style="font-family: monospace; font-weight: bold; color: var(--text-accent);">${esc(t.receiptNumber)}</span></td>
                 <td><span class="branch-pill badge-${esc(t.branchId)}">${esc(t.branchName)}</span></td>
                 <td>${esc(t.memberName || 'Anonymous')}</td>
                 <td><span class="category-pill category-${esc((t.category || '').toLowerCase().replace(' ', ''))}">${esc(t.category)}</span></td>
-                <td class="amount-cell" style="color: #10b981; font-weight: bold; text-align: right;">${money(parseFloat(t.amount))}</td>
+                <td class="amount-cell" style="color: var(--success-green); font-weight: bold; text-align: right;">${money(parseFloat(t.amount))}</td>
                 <td>${esc(t.date)}</td>
                 <td>${esc(t.paymentMethod)}</td>
                 <td>
                     <button class="action-btn-sm" onclick="ChurchApp.viewReceipt('${esc(t.id)}')">Receipt</button>
+                    ${this.isAdmin() ? `<button type="button" class="action-btn-sm action-btn-danger" onclick="ChurchApp.removeTransaction('${esc(t.id)}')" aria-label="Remove receipt ${esc(t.receiptNumber)}">Remove</button>` : ''}
                 </td>
             `;
             tbody.appendChild(tr);
         });
 
         if (filteredTx.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #9ca3af; padding: 30px;">No transactions logged.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 30px;">No transactions logged.</td></tr>`;
         }
 
         // Bind quick export buttons
@@ -2103,6 +2853,136 @@ const ChurchApp = {
         // Campaign progress + recurring-gift insights strip
         this.renderContributionSummary(branchId);
         this.renderGivingInsights(branchId);
+    },
+
+    renderCollectionSessions(branchId) {
+        const branchSelect = document.getElementById('collection-branch');
+        if (branchSelect) {
+            const isGlobal = branchId === 'all' || branchId === 'global';
+            const selectedBranch = isGlobal ? '' : branchId;
+            branchSelect.innerHTML = `${isGlobal ? '<option value="">Select campus</option>' : ''}${this.db.branches.map((branch) =>
+                `<option value="${esc(branch.id)}"${branch.id === selectedBranch ? ' selected' : ''}>${esc(branch.name)}</option>`
+            ).join('')}`;
+            branchSelect.disabled = !this.isAdmin();
+        }
+        const dateInput = document.getElementById('collection-session-date');
+        if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().split('T')[0];
+        this.updateCollectionTotal();
+
+        const inScope = (session) => !branchId || branchId === 'all' || branchId === 'global' || session.branchId === branchId;
+        const sessions = (this.db.collectionSessions || []).filter(inScope);
+        const grouped = new Map();
+        sessions.forEach((session) => {
+            const key = `${session.date}:${session.branchId}`;
+            const group = grouped.get(key) || {
+                date: session.date,
+                branchId: session.branchId,
+                branchName: session.branchName || this.db.branches.find((branch) => branch.id === session.branchId)?.name || '',
+                sessions: [],
+                sessionCount: 0,
+                offeringAmount: 0,
+                titheAmount: 0,
+                otherAmount: 0,
+                totalAmount: 0,
+            };
+            group.sessions.push(session);
+            group.sessionCount += 1;
+            group.offeringAmount += Number(session.offeringAmount) || 0;
+            group.titheAmount += Number(session.titheAmount) || 0;
+            group.otherAmount += Number(session.otherAmount) || 0;
+            group.totalAmount += Number(session.totalAmount) || 0;
+            grouped.set(key, group);
+        });
+
+        const rows = [...grouped.values()]
+            .sort((a, b) => b.date.localeCompare(a.date) || a.branchName.localeCompare(b.branchName))
+            .map((group) => `<tr>
+                <td><strong>${esc(group.date)}</strong><span class="collection-session-names">${group.sessions.map((session) => esc(session.sessionName)).join(', ')}</span></td>
+                <td><span class="branch-pill badge-${esc(group.branchId)}">${esc(group.branchName)}</span></td>
+                <td class="num">${group.sessionCount}</td>
+                <td class="num amount-cell">${money(group.offeringAmount)}</td>
+                <td class="num amount-cell">${money(group.titheAmount)}</td>
+                <td class="num amount-cell">${money(group.otherAmount)}</td>
+                <td class="num collection-day-total">${money(group.totalAmount)}</td>
+                <td>${this.isAdmin() ? group.sessions.map((session) => `<button type="button" class="action-btn-sm action-btn-danger" onclick="ChurchApp.removeCollectionSession('${esc(session.id)}')" aria-label="Remove ${esc(session.sessionName)} collection session">Remove ${esc(session.sessionName)}</button>`).join(' ') : ''}</td>
+            </tr>`).join('');
+        document.getElementById('collection-sessions-tbody').innerHTML = rows
+            || '<tr><td colspan="8" class="collection-empty">No collection sessions recorded for this campus yet.</td></tr>';
+    },
+
+    async removeCollectionSession(id) {
+        if (!this.isAdmin()) {
+            this.toast('Only an administrator can remove collection sessions.', 'error');
+            return;
+        }
+        const session = (this.db.collectionSessions || []).find((item) => item.id === id);
+        if (!session) return;
+        const confirmed = await this.confirmAction({
+            title: `Remove ${session.sessionName}?`,
+            body: `The ${session.date} collection session totaling ${money(Number(session.totalAmount))} will be permanently removed.`,
+            confirmLabel: 'Remove session',
+        });
+        if (!confirmed) return;
+        try {
+            if (this.apiEnabled()) await Church2API.removeCollectionSession(id);
+            this.db.collectionSessions = this.db.collectionSessions.filter((item) => item.id !== id);
+            this.saveDB();
+            this.renderCollectionSessions(this.session.currentBranch);
+            this.toast(`${session.sessionName} was removed.`);
+        } catch (error) {
+            console.error('Collection session removal failed:', error);
+            this.toast(`Could not remove this collection session: ${error.message}`, 'error');
+        }
+    },
+
+    updateCollectionTotal() {
+        const amount = (id) => Number(document.getElementById(id).value) || 0;
+        const total = Math.round((amount('collection-offering') + amount('collection-tithe') + amount('collection-other')) * 100) / 100;
+        document.getElementById('collection-total').textContent = money(total);
+    },
+
+    async handleCreateCollectionSession() {
+        if (!this.isAdmin()) {
+            this.toast('Only an administrator can record a collection session.', 'error');
+            return;
+        }
+        const form = document.getElementById('collection-session-form');
+        const submitButton = form.querySelector('[type="submit"]');
+        const sessionName = document.getElementById('collection-session-name').value.trim();
+        const date = document.getElementById('collection-session-date').value;
+        const branchId = document.getElementById('collection-branch').value;
+        const offeringAmount = Number(document.getElementById('collection-offering').value);
+        const titheAmount = Number(document.getElementById('collection-tithe').value);
+        const otherAmount = Number(document.getElementById('collection-other').value);
+        const totalAmount = Math.round((offeringAmount + titheAmount + otherAmount) * 100) / 100;
+        const branch = this.db.branches.find((item) => item.id === branchId);
+
+        if (!sessionName || !date || !branch || [offeringAmount, titheAmount, otherAmount].some((amount) => !Number.isFinite(amount) || amount < 0) || totalAmount <= 0) {
+            this.toast('Enter a session name, date, campus, and at least one collection amount.', 'error');
+            return;
+        }
+
+        submitButton.disabled = true;
+        submitButton.textContent = 'Saving session…';
+        try {
+            const details = { sessionName, date, branchId, offeringAmount, titheAmount, otherAmount };
+            const saved = this.apiEnabled()
+                ? await Church2API.createCollectionSession(details)
+                : { id: `cs_${Date.now()}`, ...details, branchName: branch.name, totalAmount };
+            this.db.collectionSessions.unshift(saved);
+            this.saveDB();
+            form.reset();
+            document.getElementById('collection-session-date').value = new Date().toISOString().split('T')[0];
+            this.updateCollectionTotal();
+            this.renderCollectionSessions(this.session.currentBranch);
+            this.toast(`Collection session saved. Total received: ${money(saved.totalAmount)}.`);
+        } catch (error) {
+            console.error('Collection session save failed:', error);
+            this.toast(`Could not save this collection session: ${error.message}`, 'error');
+        } finally {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Save collection session';
+        }
     },
 
     // Contributions, standing on their own.
@@ -2146,10 +3026,10 @@ const ChurchApp = {
 
         el.innerHTML = `
             <div class="card-glass contribution-totals">
-                <span class="contribution-eyebrow">Total Contributions</span>
+                <span class="contribution-eyebrow">Total from individual gifts</span>
                 <div class="contribution-total">${money(total)}</div>
-                <p class="contribution-meta">${gifts.length} contribution${gifts.length === 1 ? '' : 's'}
-                   from ${givers.length} ${givers.length === 1 ? 'giver' : 'givers'}</p>
+                <p class="contribution-meta">${gifts.length} individual receipt${gifts.length === 1 ? '' : 's'}
+                   from ${givers.length} ${givers.length === 1 ? 'giver' : 'givers'}<br>Service collection totals are shown above.</p>
             </div>
             <div class="card-glass contribution-people">
                 <div class="contribution-head">
@@ -2182,15 +3062,41 @@ const ChurchApp = {
         // the 17 Aug meeting asked us to break. The campaign records remain in
         // the database untouched, pending Thursday's decision on where (and
         // whether) project fundraising should live.
-        const recurring = (this.db.recurringGifts || []).filter((r) => r.active && inScope(r.branchId));
+        const recurringItems = (this.db.recurringGifts || []).filter((r) => inScope(r.branchId));
+        const recurring = recurringItems.filter((r) => r.active);
         const recurringTotal = recurring.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
         el.innerHTML = `<div class="card-glass campaign-card">
             <span class="campaign-eyebrow"><svg class="inline-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9a8 8 0 0 1 13.5-3.5L20 8"/><path d="M20 4v4h-4"/><path d="M20 15a8 8 0 0 1-13.5 3.5L4 16"/><path d="M4 20v-4h4"/></svg> Recurring Giving</span>
             <h4>${recurring.length} active schedule${recurring.length === 1 ? '' : 's'}</h4>
             <div class="campaign-figures"><strong>${window.money(recurringTotal)}</strong> committed per cycle</div>
-            ${recurring.length ? `<ul class="recurring-list">${recurring.slice(0, 3).map((r) =>
-                `<li>${esc(r.memberName)} — ${window.money(parseFloat(r.amount))} ${esc(r.frequency)} (${esc(r.category)})</li>`).join('')}</ul>` : ''}
+            ${recurringItems.length ? `<ul class="recurring-list">${recurringItems.map((r) =>
+                `<li><span>${esc(r.memberName)} — ${window.money(parseFloat(r.amount))} ${esc(r.frequency)} (${esc(r.category)})${r.active ? '' : ' · Paused'}</span>${this.isAdmin() ? `<button type="button" class="action-btn-sm action-btn-danger" onclick="ChurchApp.removeRecurringGift('${esc(r.id)}')" aria-label="Remove recurring gift for ${esc(r.memberName)}">Remove</button>` : ''}</li>`).join('')}</ul>` : ''}
         </div>`;
+    },
+
+    async removeRecurringGift(id) {
+        if (!this.isAdmin()) {
+            this.toast('Only an administrator can remove recurring gifts.', 'error');
+            return;
+        }
+        const gift = (this.db.recurringGifts || []).find((item) => item.id === id);
+        if (!gift) return;
+        const confirmed = await this.confirmAction({
+            title: `Remove ${gift.memberName}'s recurring gift?`,
+            body: `The ${money(Number(gift.amount))} ${gift.frequency} giving schedule will be permanently removed.`,
+            confirmLabel: 'Remove schedule',
+        });
+        if (!confirmed) return;
+        try {
+            if (this.apiEnabled()) await Church2API.removeRecurringGift(id);
+            this.db.recurringGifts = this.db.recurringGifts.filter((item) => item.id !== id);
+            this.saveDB();
+            this.renderGivingInsights(this.session.currentBranch);
+            this.toast('Recurring gift schedule removed.');
+        } catch (error) {
+            console.error('Recurring gift removal failed:', error);
+            this.toast(`Could not remove this recurring gift: ${error.message}`, 'error');
+        }
     },
 
     // Printable, tax-ready annual giving statement for one member.
@@ -2218,6 +3124,7 @@ const ChurchApp = {
                     <div class="receipt-header">
                         <h2>${esc(MMC_BRAND.name.toUpperCase())}</h2>
                         <p>${esc(member.branchName)}</p>
+                        <p style="font-size: 0.75rem; color:#9ca3af;">Branch Code: ${esc((member.branchId || '').toUpperCase())}</p>
                     </div>
                     <p style="margin-top:10px;"><strong>${esc(member.firstName)} ${esc(member.lastName)}</strong><br>
                     <span style="color:var(--text-secondary); font-size:0.8rem;">${esc(member.email)}</span></p>
@@ -2262,7 +3169,7 @@ const ChurchApp = {
         const method = document.getElementById('tx-method-select').value;
         const date = document.getElementById('tx-date-input').value || new Date().toISOString().split('T')[0];
 
-        if (isNaN(amount) || amount <= 0) { this.toast('Enter a valid contribution amount greater than Ksh 0.', 'error'); return; }
+        if (isNaN(amount) || amount <= 0) { this.toast('Enter a valid contribution amount greater than ₵0.', 'error'); return; }
 
         let memberName = 'Anonymous';
         // When "All Branches (Global)" is active there is no single campus to file
@@ -2349,10 +3256,6 @@ const ChurchApp = {
                         <span>Giving Allocation:</span>
                         <strong class="category-pill">${esc(tx.category)}</strong>
                     </div>
-                    <div class="receipt-row">
-                        <span>Payment Channel:</span>
-                        <strong>${esc(tx.paymentMethod)}</strong>
-                    </div>
                     <hr style="border: 0; border-top: 1px dashed rgba(255,255,255,0.15); margin: 15px 0;">
                     <div class="receipt-row total-row">
                         <span style="font-size: 1.1rem;">TOTAL AMOUNT RECEIVED:</span>
@@ -2387,6 +3290,31 @@ const ChurchApp = {
             </div>
         `;
         this.openModal('receipt-modal');
+    },
+
+    async removeTransaction(id) {
+        if (!this.isAdmin()) {
+            this.toast('Only an administrator can remove financial transactions.', 'error');
+            return;
+        }
+        const transaction = this.db.transactions.find((item) => item.id === id);
+        if (!transaction) return;
+        const confirmed = await this.confirmAction({
+            title: `Remove receipt ${transaction.receiptNumber}?`,
+            body: `${money(Number(transaction.amount))} from ${transaction.memberName || 'Anonymous'} will be permanently removed from the financial ledger.`,
+            confirmLabel: 'Remove transaction',
+        });
+        if (!confirmed) return;
+        try {
+            if (this.apiEnabled()) await Church2API.removeTransaction(id);
+            this.db.transactions = this.db.transactions.filter((item) => item.id !== id);
+            this.saveDB();
+            this.renderFinancials();
+            this.toast(`Receipt ${transaction.receiptNumber} was removed.`);
+        } catch (error) {
+            console.error('Transaction removal failed:', error);
+            this.toast(`Could not remove receipt ${transaction.receiptNumber}: ${error.message}`, 'error');
+        }
     },
 
     exportFinancialCSV(transactions) {
@@ -2450,6 +3378,11 @@ const ChurchApp = {
             selectEvent.appendChild(opt);
         });
         selectEvent.value = activeEventId;
+        const removeEventButton = document.getElementById('remove-rota-event');
+        if (removeEventButton) {
+            removeEventButton.hidden = !activeEventId || !this.canManageMinistryItems();
+            removeEventButton.onclick = () => this.removeEvent(activeEventId);
+        }
 
         const requiredRolesEmpty = document.getElementById('rota-required-roles');
         if (!activeEventId) {
@@ -2479,7 +3412,7 @@ const ChurchApp = {
             div.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <strong style="color: #93c5fd; font-size: 0.95rem;">${esc(role)}</strong>
+                        <strong style="color: var(--text-accent); font-size: 0.95rem;">${esc(role)}</strong>
                         <p class="rota-status ${volunteerObj ? 'is-assigned' : 'is-unassigned'}">Status: ${volunteerObj ? '✅ Roster Assigned' : '⚠️ Unassigned'}</p>
                     </div>
                     <div>
@@ -2489,7 +3422,7 @@ const ChurchApp = {
                                 <button aria-label="Remove ${esc(volunteerObj.firstName)} ${esc(volunteerObj.lastName)} from ${esc(role)}" onclick="ChurchApp.removeVolunteerFromRole('${esc(event.id)}', '${esc(volunteerObj.id)}')" class="remove-vol-btn">×</button>
                             </div>
                         ` : `
-                            <button class="action-btn-sm" onclick="ChurchApp.showMatchAI('${esc(event.id)}', '${esc(role).replace(/'/g, "\\'")}')"><svg class="inline-ico" viewBox="0 0 24 24" aria-hidden="true" style="fill:currentColor;stroke:none;"><path d="M12 4l1.4 4 4 1.4-4 1.4L12 15l-1.4-4.2L6.6 9.4l4-1.4z"/></svg> AI Match</button>
+                            <button class="action-btn-sm" onclick="ChurchApp.showMatchAI('${esc(event.id)}', '${esc(role).replace(/'/g, "\\'")}')"><svg class="inline-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l1.4 4 4 1.4-4 1.4L12 15l-1.4-4.2L6.6 9.4l4-1.4z"/></svg> AI Match</button>
                         `}
                     </div>
                 </div>
@@ -2504,12 +3437,55 @@ const ChurchApp = {
         };
     },
 
-    removeVolunteerFromRole(eventId, volunteerId) {
-        const event = this.db.events.find(e => e.id === eventId);
-        if (event) {
-            event.volunteersSignedUp = event.volunteersSignedUp.filter(v => v !== volunteerId);
+    async removeVolunteerFromRole(eventId, volunteerId) {
+        if (!this.canManageMinistryItems()) {
+            this.toast('You do not have permission to change event rosters.', 'error');
+            return;
+        }
+        const event = (this.db.events || []).find((item) => item.id === eventId);
+        const volunteer = this.db.members.find((item) => item.id === volunteerId);
+        if (!event || !volunteer) return;
+        const confirmed = await this.confirmAction({
+            title: `Remove ${volunteer.firstName} ${volunteer.lastName} from the event roster?`,
+            body: `The volunteer assignment for ${event.title} will be removed. The member profile will remain.`,
+            confirmLabel: 'Remove assignment',
+        });
+        if (!confirmed) return;
+        try {
+            if (this.apiEnabled()) await Church2API.removeEventVolunteer(eventId, volunteerId);
+            event.volunteersSignedUp = event.volunteersSignedUp.filter((id) => id !== volunteerId);
             this.saveDB();
             this.renderMinistry();
+            this.toast(`${volunteer.firstName} was removed from the event roster.`);
+        } catch (error) {
+            console.error('Event roster removal failed:', error);
+            this.toast(`Could not remove ${volunteer.firstName} from this event: ${error.message}`, 'error');
+        }
+    },
+
+    async removeEvent(eventId) {
+        if (!this.canManageMinistryItems()) {
+            this.toast('You do not have permission to remove events.', 'error');
+            return;
+        }
+        const event = (this.db.events || []).find((item) => item.id === eventId);
+        if (!event) return;
+        const confirmed = await this.confirmAction({
+            title: `Remove ${event.title}?`,
+            body: 'The event and its volunteer rota will be permanently removed.',
+            confirmLabel: 'Remove event',
+        });
+        if (!confirmed) return;
+        try {
+            if (this.apiEnabled()) await Church2API.removeEvent(eventId);
+            this.db.events = this.db.events.filter((item) => item.id !== eventId);
+            if (this.session.selectedEventId === eventId) this.session.selectedEventId = null;
+            this.saveDB();
+            this.renderMinistry();
+            this.toast(`${event.title} was removed.`);
+        } catch (error) {
+            console.error('Event removal failed:', error);
+            this.toast(`Could not remove ${event.title}: ${error.message}`, 'error');
         }
     },
 
@@ -2527,7 +3503,7 @@ const ChurchApp = {
                     <button class="modal-close" aria-label="Close volunteer matcher" onclick="ChurchApp.closeModal('ai-matcher-modal')">×</button>
                 </div>
                 <div class="modal-body">
-                    <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:12px;">Searching database for members with skill: <strong style="color:#60a5fa;">${esc(role)}</strong> and solid engagement scoring index.</p>
+                    <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:12px;">Searching database for members with skill: <strong style="color:var(--text-accent);">${esc(role)}</strong> and solid engagement scoring index.</p>
                     <div class="matches-list">
                         ${matches.map(m => `
                             <div class="match-item">
@@ -2590,10 +3566,10 @@ const ChurchApp = {
                 <p class="prayer-text">"${esc(pr.text)}"</p>
                 <div class="prayer-actions">
                     <span>Routed to: <strong>${esc(pr.route)}</strong></span>
-                    <div>
-                        <button class="action-btn-sm btn-approve" onclick="ChurchApp.approvePrayer('${esc(pr.id)}')">Approve</button>
-                        <button class="action-btn-sm btn-dismiss" onclick="ChurchApp.deletePrayer('${esc(pr.id)}')">Dismiss</button>
-                    </div>
+                    ${this.canManageMinistryItems() ? `<div>
+                        <button class="action-btn-sm btn-approve" onclick="ChurchApp.approvePrayer('${esc(pr.id)}')">Approve &amp; remove</button>
+                        <button class="action-btn-sm btn-dismiss" onclick="ChurchApp.deletePrayer('${esc(pr.id)}')">Remove</button>
+                    </div>` : ''}
                 </div>
             `;
             listContainer.appendChild(card);
@@ -2623,6 +3599,9 @@ const ChurchApp = {
                         <span class="broadcast-audience-pill">👥 ${esc(audience)}</span>
                         ${(a.channels || []).map(c => `<span class="broadcast-channel-pill">${c === 'email' ? '📧' : c === 'sms' ? '💬' : '🔔'} ${esc(c)}</span>`).join('')}
                         <span class="broadcast-reach">Delivered to ${esc(a.recipients)} members</span>
+                        ${this.isAdmin() && (this.session.currentRole === 'hq_admin' || a.audience === this.session.currentBranch)
+                            ? `<button type="button" class="action-btn-sm action-btn-danger" onclick="ChurchApp.removeAnnouncement('${esc(a.id)}')" aria-label="Remove ${esc(a.title)} from broadcast history">Remove from history</button>`
+                            : ''}
                     </div>
                 </div>`;
             }).join('') || '<p class="muted-italic" style="font-size:0.8rem;">No broadcasts sent yet.</p>';
@@ -2630,7 +3609,7 @@ const ChurchApp = {
 
         const form = document.getElementById('broadcast-form');
         if (form) {
-            form.onsubmit = (e) => {
+            form.onsubmit = async (e) => {
                 e.preventDefault();
                 const title = document.getElementById('broadcast-title').value.trim();
                 const body = document.getElementById('broadcast-body').value.trim();
@@ -2643,36 +3622,85 @@ const ChurchApp = {
                     ? this.db.members.length
                     : this.db.members.filter(m => m.branchId === audience).length;
 
-                this.db.announcements = this.db.announcements || [];
-                const announcement = {
-                    id: `an_${Date.now()}`,
-                    title, body, audience, channels, recipients,
-                    sentAt: new Date().toISOString()
-                };
-                this.db.announcements.unshift(announcement);
-                this.saveDB();
-                this.apiWrite(() => Church2API.sendAnnouncement({ title, body, audience, channels }), (srv) => { if (srv && srv.id) announcement.id = srv.id; });
-                form.reset();
-                document.querySelectorAll('.broadcast-channel').forEach(c => { c.checked = (c.value !== 'push'); });
-                this.renderBroadcasts();
-                this.toast(`📣 Broadcast sent to ${recipients} members via ${channels.join(', ')}.`);
+                try {
+                    const announcement = this.apiEnabled()
+                        ? await Church2API.sendAnnouncement({ title, body, audience, channels })
+                        : {
+                            id: `an_${Date.now()}`,
+                            title, body, audience, channels, recipients,
+                            sentAt: new Date().toISOString()
+                        };
+                    this.db.announcements = this.db.announcements || [];
+                    this.db.announcements.unshift(announcement);
+                    this.saveDB();
+                    form.reset();
+                    document.querySelectorAll('.broadcast-channel').forEach(c => { c.checked = (c.value !== 'push'); });
+                    this.renderBroadcasts();
+                    this.toast(`📣 Broadcast sent to ${announcement.recipients} members via ${channels.join(', ')}.`);
+                } catch (error) {
+                    console.error('Broadcast save failed:', error);
+                    this.toast(`Could not save this broadcast: ${error.message}`, 'error');
+                }
             };
         }
     },
 
     approvePrayer(prId) {
-        this.db.prayerRequests = this.db.prayerRequests.filter(p => p.id !== prId);
-        this.saveDB();
-        this.apiWrite(() => Church2API.dismissPrayer(prId));
-        this.toast('Prayer request approved and routed to the prayer team.');
-        this.renderCommunications();
+        return this.deletePrayer(prId, true);
     },
 
-    deletePrayer(prId) {
-        this.db.prayerRequests = this.db.prayerRequests.filter(p => p.id !== prId);
-        this.saveDB();
-        this.apiWrite(() => Church2API.dismissPrayer(prId));
-        this.renderCommunications();
+    async deletePrayer(prId, approved = false) {
+        if (!this.canManageMinistryItems()) {
+            this.toast('You do not have permission to remove prayer requests.', 'error');
+            return;
+        }
+        const prayer = (this.db.prayerRequests || []).find((item) => item.id === prId);
+        if (!prayer) return;
+        const confirmed = await this.confirmAction({
+            title: `${approved ? 'Approve and remove' : 'Remove'} this prayer request?`,
+            body: 'This request will be permanently removed from the active prayer inbox.',
+            confirmLabel: approved ? 'Approve and remove' : 'Remove request',
+        });
+        if (!confirmed) return;
+        try {
+            if (this.apiEnabled()) await Church2API.dismissPrayer(prId);
+            this.db.prayerRequests = this.db.prayerRequests.filter((item) => item.id !== prId);
+            this.saveDB();
+            this.renderCommunications();
+            this.toast(approved ? 'Prayer request approved and removed from the inbox.' : 'Prayer request removed.');
+        } catch (error) {
+            console.error('Prayer request removal failed:', error);
+            this.toast(`Could not remove the prayer request: ${error.message}`, 'error');
+        }
+    },
+
+    async removeAnnouncement(id) {
+        if (!this.isAdmin()) {
+            this.toast('Only an administrator can remove broadcasts from history.', 'error');
+            return;
+        }
+        const announcement = (this.db.announcements || []).find((item) => item.id === id);
+        if (!announcement) return;
+        if (this.session.currentRole !== 'hq_admin' && announcement.audience !== this.session.currentBranch) {
+            this.toast('You may only remove broadcasts sent to your campus.', 'error');
+            return;
+        }
+        const confirmed = await this.confirmAction({
+            title: `Remove "${announcement.title}" from history?`,
+            body: 'This removes the broadcast record from the console. Messages already sent cannot be recalled.',
+            confirmLabel: 'Remove from history',
+        });
+        if (!confirmed) return;
+        try {
+            if (this.apiEnabled()) await Church2API.removeAnnouncement(id);
+            this.db.announcements = this.db.announcements.filter((item) => item.id !== id);
+            this.saveDB();
+            this.renderBroadcasts();
+            this.toast('Broadcast removed from history.');
+        } catch (error) {
+            console.error('Broadcast removal failed:', error);
+            this.toast(`Could not remove this broadcast: ${error.message}`, 'error');
+        }
     },
 
     handleSermonRepurpose() {
@@ -2713,663 +3741,6 @@ const ChurchApp = {
         `;
     },
 
-    // 12. Panel: Member Mobile App Preview Simulation
-    renderMobilePreview() {
-        const view = this.session.simulatedMobileView;
-        
-        // Setup Active Subview View
-        const subviews = ['mobile-home', 'mobile-sermons', 'mobile-bible', 'mobile-give', 'mobile-serve', 'mobile-chat'];
-        subviews.forEach(sv => {
-            const el = document.getElementById(sv);
-            if (el) {
-                // 'flex', not 'block': .mobile-app-body is a flex column and a
-                // block override collapses children that rely on flex sizing
-                // (the chat transcript would shrink to its content).
-                el.style.display = (sv === `mobile-${view}`) ? 'flex' : 'none';
-            }
-        });
-
-        // Sync Mobile Navigation Active State
-        const buttons = document.querySelectorAll('.mobile-tab-btn');
-        buttons.forEach(btn => {
-            if (btn.dataset.view === view) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
-        });
-
-        // Dynamic rendering based on views
-        if (view === 'home') {
-            this.renderMobileHome();
-        } else if (view === 'sermons') {
-            this.renderMobileSermons();
-        } else if (view === 'bible') {
-            this.renderMobileBible();
-        } else if (view === 'give') {
-            this.renderMobileGive();
-        } else if (view === 'serve') {
-            this.renderMobileServe();
-        } else if (view === 'chat') {
-            this.renderMobileChat();
-        }
-    },
-
-    switchMobileView(viewName) {
-        this.session.simulatedMobileView = viewName;
-        this.renderMobilePreview();
-    },
-
-    renderMobileHome() {
-        const eventsContainer = document.getElementById('mobile-upcoming-events');
-        eventsContainer.innerHTML = '';
-
-        this.db.events.forEach(e => {
-            const div = document.createElement('div');
-            div.className = 'mobile-event-card';
-            const rsvped = (this.session.rsvpedEvents || []).includes(e.id);
-            div.innerHTML = `
-                <div class="mobile-event-top">
-                    <strong>${esc(e.title)}</strong>
-                    <span class="mobile-event-date">${esc(e.date)}</span>
-                </div>
-                <p class="mobile-event-desc">${esc(e.description)}</p>
-                <div class="mobile-event-bottom">
-                    <span class="mobile-event-time"><svg class="inline-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg> ${esc(e.time)}</span>
-                    <button class="mobile-rsvp-btn${rsvped ? ' is-rsvped' : ''}" ${rsvped ? 'disabled' : ''} onclick="ChurchApp.handleMobileRSVP('${esc(e.id)}')">${rsvped ? '✓ Going' : 'RSVP'}</button>
-                </div>
-            `;
-            eventsContainer.appendChild(div);
-        });
-
-        this.renderMobileGroups();
-    },
-
-    handleMobileRSVP(eventId) {
-        this.session.rsvpedEvents = this.session.rsvpedEvents || [];
-        if (!this.session.rsvpedEvents.includes(eventId)) {
-            this.session.rsvpedEvents.push(eventId);
-        }
-        this.renderMobileHome();
-    },
-
-    renderMobileSermons() {
-        const container = document.getElementById('mobile-sermon-list');
-        container.innerHTML = '';
-
-        this.db.sermons.forEach(s => {
-            const card = document.createElement('div');
-            card.className = 'mobile-sermon-card';
-            card.onclick = () => this.playMobileSermon(s.id);
-            card.innerHTML = `
-                <div class="mobile-sermon-thumb" style="background: linear-gradient(135deg, #1e1b4b, #311042); display:flex; justify-content:center; align-items:center;">
-                    <span style="font-size:1.5rem;">🎬</span>
-                </div>
-                <div style="padding:10px;">
-                    <strong style="font-size:0.85rem; color:var(--text-primary); display:block;">${esc(s.title)}</strong>
-                    <span style="font-size:0.7rem; color:var(--text-secondary); display:block;">By ${esc(s.preacher)} | ${esc(s.duration)}</span>
-                </div>
-            `;
-            container.appendChild(card);
-        });
-    },
-
-    playMobileSermon(sermonId) {
-        const sermon = this.db.sermons.find(s => s.id === sermonId);
-        if (!sermon) return;
-
-        const playerContainer = document.getElementById('mobile-sermon-player-container');
-        playerContainer.style.display = 'block';
-        playerContainer.innerHTML = `
-            <div class="mobile-sermon-player" style="background: rgba(28,28,45,0.95); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); margin-bottom:12px;">
-                <video src="${encodeURI(sermon.mediaUrl)}" controls autoplay style="width:100%; border-radius:6px; max-height:120px;"></video>
-                <div style="margin-top:8px;">
-                    <strong style="font-size:0.85rem; color:#fff; display:block;">Playing: ${esc(sermon.title)}</strong>
-                    <span style="font-size:0.7rem; color:#9ca3af;">Campus: ${esc(sermon.branchName)}</span>
-                </div>
-            </div>
-        `;
-    },
-
-    // Deterministic Verse of the Day — same verse for everyone on a given date.
-    renderVerseOfDay() {
-        const el = document.getElementById('verse-of-day');
-        if (!el) return;
-        const pool = [
-            { ref: 'Lamentations 3:22-23', text: 'His mercies never come to an end; they are new every morning.' },
-            { ref: 'Joshua 1:9', text: 'Be strong and courageous. Do not be frightened, for the Lord your God is with you wherever you go.' },
-            { ref: 'Psalm 118:24', text: 'This is the day that the Lord has made; let us rejoice and be glad in it.' },
-            { ref: 'Proverbs 3:5-6', text: 'Trust in the Lord with all your heart, and do not lean on your own understanding.' },
-            { ref: 'Zephaniah 3:17', text: 'The Lord your God is in your midst, a mighty one who will save.' },
-            { ref: '2 Corinthians 12:9', text: 'My grace is sufficient for you, for my power is made perfect in weakness.' },
-            { ref: 'Psalm 46:1', text: 'God is our refuge and strength, a very present help in trouble.' }
-        ];
-        const now = new Date();
-        const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
-        const v = pool[dayOfYear % pool.length];
-        el.innerHTML = `
-            <span class="votd-eyebrow"><svg class="badge-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l1.7 4.8 4.8 1.7-4.8 1.7L12 16.5l-1.7-4.8L5.5 10l4.8-1.7z"/></svg> Verse of the Day</span>
-            <p class="votd-text">"${esc(v.text)}"</p>
-            <span class="votd-ref">— ${esc(v.ref)}</span>`;
-    },
-
-    _todayStr() { return new Date().toISOString().split('T')[0]; },
-
-    getReadingState() {
-        this.db.readingState = this.db.readingState || {};
-        if (!this.db.readingState.m1) {
-            this.db.readingState.m1 = { streak: 0, lastReadDate: null, plans: {} };
-        }
-        return this.db.readingState.m1;
-    },
-
-    renderReadingPlans() {
-        const state = this.getReadingState();
-        const streakEl = document.getElementById('reading-streak');
-        if (streakEl) {
-            streakEl.innerHTML = state.streak > 0 ? `🔥 ${state.streak}-day streak` : '';
-        }
-
-        const container = document.getElementById('reading-plans');
-        if (!container) return;
-        container.innerHTML = (this.db.readingPlans || []).map(plan => {
-            const done = state.plans[plan.id] || [];
-            const total = plan.days.length;
-            const pct = Math.round((done.length / total) * 100);
-            // "Today's reading" = first uncompleted day, else the last day.
-            let todayIdx = plan.days.findIndex((_, i) => !done.includes(i));
-            if (todayIdx === -1) todayIdx = total - 1;
-            const day = plan.days[todayIdx];
-            const complete = done.includes(todayIdx);
-            const finished = done.length === total;
-            return `<div class="reading-plan-card">
-                <div class="reading-plan-head">
-                    <strong>${esc(plan.emoji)} ${esc(plan.title)}</strong>
-                    <span class="reading-plan-progress">${done.length}/${total}</span>
-                </div>
-                <div class="reading-bar"><div class="reading-bar-fill" style="width:${pct}%;"></div></div>
-                ${finished
-                    ? `<p class="reading-done">✅ Plan complete — well done!</p>`
-                    : `<div class="reading-today">
-                        <span class="reading-day-label">Day ${todayIdx + 1}: ${esc(day.ref)}</span>
-                        <p class="reading-day-text">"${esc(day.text)}"</p>
-                        <button class="reading-mark-btn${complete ? ' done' : ''}" onclick="ChurchApp.markReadingDay('${esc(plan.id)}', ${todayIdx})">${complete ? 'Completed ✓' : 'Mark as read'}</button>
-                    </div>`}
-            </div>`;
-        }).join('');
-    },
-
-    markReadingDay(planId, dayIdx) {
-        const state = this.getReadingState();
-        state.plans[planId] = state.plans[planId] || [];
-        const arr = state.plans[planId];
-        if (arr.includes(dayIdx)) return; // already read
-
-        arr.push(dayIdx);
-
-        // Update streak on the first reading of a new calendar day.
-        const today = this._todayStr();
-        if (state.lastReadDate !== today) {
-            const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-            state.streak = (state.lastReadDate === yesterday) ? state.streak + 1 : 1;
-            state.lastReadDate = today;
-        }
-
-        this.saveDB();
-        this.renderReadingPlans();
-        this.toast('📖 Reading complete. Keep the streak going!');
-    },
-
-    renderMobileBible() {
-        this.renderVerseOfDay();
-        this.renderReadingPlans();
-
-        const verseContainer = document.getElementById('mobile-bible-verses');
-        const searchInput = document.getElementById('mobile-bible-search').value.toLowerCase();
-        const selectedBook = document.getElementById('mobile-bible-book').value;
-        const selectedChapter = document.getElementById('mobile-bible-chapter').value;
-
-        // Mock bible translation data
-        const bibleData = [
-            { ref: 'Malachi 3:10', text: 'Bring the full tithe into the storehouse, that there may be food in my house. And thereby put me to the test, says the Lord of hosts.' },
-            { ref: 'Luke 12:34', text: 'For where your treasure is, there will your heart be also.' },
-            { ref: 'Romans 12:1', text: 'I appeal to you therefore, brothers, by the mercies of God, to present your bodies as a living sacrifice, holy and acceptable to God.' },
-            { ref: 'Proverbs 11:25', text: 'A generous soul will prosper; he who refreshes others will himself be refreshed.' },
-            { ref: 'Hebrews 11:1', text: 'Now faith is the assurance of things hoped for, the conviction of things not seen.' },
-            { ref: 'Ephesians 2:8', text: 'For by grace you have been saved through faith. And this is not your own doing; it is the gift of God.' },
-            { ref: 'John 3:16', text: 'For God so loved the world, that he gave his only Son, that whoever believes in him should not perish but have eternal life.' },
-            { ref: 'Isaiah 40:31', text: 'But they who wait for the Lord shall renew their strength; they shall mount up with wings like eagles; they shall run and not be weary; they shall walk and not faint.' },
-            { ref: 'Philippians 4:13', text: 'I can do all things through him who strengthens me.' },
-            { ref: 'Hebrews 11:6', text: 'And without faith it is impossible to please him, for whoever would draw near to God must believe that he exists and that he rewards those who seek him.' },
-            { ref: '1 Corinthians 13:13', text: 'So now faith, hope, and love abide, these three; but the greatest of these is love.' }
-        ];
-
-        verseContainer.innerHTML = '';
-        
-        const filtered = bibleData.filter(v => {
-            // Book match
-            if (selectedBook !== 'all') {
-                if (!v.ref.toLowerCase().includes(selectedBook.toLowerCase())) return false;
-            }
-            // Chapter match
-            if (selectedChapter !== 'all') {
-                const parts = v.ref.split(':');
-                if (parts.length > 0) {
-                    const chapterPart = parts[0].trim().split(' ').pop();
-                    if (chapterPart !== selectedChapter) return false;
-                }
-            }
-            // Search text match
-            if (searchInput) {
-                if (!v.ref.toLowerCase().includes(searchInput) && !v.text.toLowerCase().includes(searchInput)) return false;
-            }
-            return true;
-        });
-
-        filtered.forEach(v => {
-            const p = document.createElement('div');
-            p.className = 'mobile-bible-verse-item';
-            p.innerHTML = `
-                <strong style="font-size:0.8rem; color:#93c5fd; display:block;">${esc(v.ref)} (${esc(this.session.bibleVersion)})</strong>
-                <p style="font-size:0.8rem; color:var(--text-secondary); margin-top:2px;">"${esc(v.text)}"</p>
-            `;
-            verseContainer.appendChild(p);
-        });
-
-        if (filtered.length === 0) {
-            verseContainer.innerHTML = `<div style="text-align:center; color:#9ca3af; padding:15px; font-size:0.75rem;">No verses found matching query.</div>`;
-        }
-
-        // Add bind events
-        document.getElementById('mobile-bible-search').oninput = () => this.renderMobileBible();
-        document.getElementById('mobile-bible-book').onchange = () => this.renderMobileBible();
-        document.getElementById('mobile-bible-chapter').onchange = () => this.renderMobileBible();
-        document.getElementById('mobile-bible-version').onchange = (e) => {
-            this.session.bibleVersion = e.target.value;
-            this.renderMobileBible();
-        };
-    },
-
-    // Processing fee model used for the "cover the fees" option (card rate).
-    /**
-     * Transaction charge for the "cover the charge" option, in shillings.
-     * M-Pesa paybill charges are borne by the payer under Safaricom's tariff,
-     * so only card carries a percentage fee the church would otherwise absorb.
-     */
-    givingFee(amount, method) {
-        const m = method || (window.MMC_BRAND && MMC_BRAND.giving.defaultMethod) || 'M-Pesa';
-        if (m !== 'Card') return 0;
-        const f = (window.MMC_BRAND && MMC_BRAND.giving.fees) || { cardPercent: 0.029, cardFlat: 30 };
-        return Math.round(amount * f.cardPercent + f.cardFlat);
-    },
-
-    renderMobileGive() {
-        // Generates dropdown options for giving branches
-        const select = document.getElementById('mobile-giving-branch');
-        select.innerHTML = '';
-        this.db.branches.forEach(b => {
-            const opt = document.createElement('option');
-            opt.value = b.id;
-            opt.text = b.name;
-            select.appendChild(opt);
-        });
-
-        const amountInput = document.getElementById('mobile-giving-amount');
-        const feeLabel = document.getElementById('give-fees-amount');
-        const coverFees = document.getElementById('mobile-giving-cover-fees');
-        const methodSel = document.getElementById('mobile-giving-method');
-        const feesRow = document.getElementById('cover-fees-row');
-        const mpesaHint = document.getElementById('mpesa-hint');
-
-        // Surface the paybill from the brand config rather than hardcoding it.
-        // Until the church confirms its live short code, show NO number at all:
-        // a plausible-looking but wrong paybill is how a member's tithe ends up
-        // in a stranger's account. `shortCodeConfirmed` gates this.
-        const brand = window.MMC_BRAND;
-        const hintText = document.getElementById('mpesa-hint-text');
-        if (brand && hintText) {
-            const mpesa = brand.giving.mpesa;
-            if (mpesa.shortCodeConfirmed) {
-                hintText.innerHTML = `You'll get an STK prompt on your phone to confirm. `
-                    + `Paybill <strong>${esc(mpesa.paybill)}</strong>, `
-                    + `account <strong>${esc(mpesa.accountName)}</strong>.`;
-                mpesaHint.classList.remove('is-unconfirmed');
-            } else {
-                hintText.textContent =
-                    'M-Pesa giving is not live yet — the church\u2019s paybill is still being '
-                    + 'confirmed. Please give in person or by bank transfer for now.';
-                mpesaHint.classList.add('is-unconfirmed');
-            }
-        }
-
-        const updateFee = () => {
-            const amt = parseFloat(amountInput.value) || 0;
-            const method = methodSel ? methodSel.value : 'M-Pesa';
-            const fee = this.givingFee(amt, method);
-            if (feeLabel) feeLabel.textContent = money(fee);
-            // Only card carries a charge the church would absorb, so the
-            // cover-the-charge option is meaningless for the other rails.
-            if (feesRow) feesRow.style.display = fee > 0 ? '' : 'none';
-            if (fee === 0 && coverFees) coverFees.checked = false;
-            if (mpesaHint) mpesaHint.style.display = method === 'M-Pesa' ? '' : 'none';
-        };
-        if (methodSel) methodSel.onchange = updateFee;
-
-        // Quick-amount chips
-        document.querySelectorAll('#mobile-give .give-chip').forEach(chip => {
-            chip.onclick = () => {
-                amountInput.value = chip.dataset.amount;
-                document.querySelectorAll('#mobile-give .give-chip').forEach(c => c.classList.remove('is-active'));
-                chip.classList.add('is-active');
-                updateFee();
-            };
-        });
-        amountInput.oninput = () => {
-            document.querySelectorAll('#mobile-give .give-chip').forEach(c => c.classList.remove('is-active'));
-            updateFee();
-        };
-        if (coverFees) coverFees.onchange = updateFee;
-        updateFee();
-    },
-
-    handleMobileGiving() {
-        const branchId = document.getElementById('mobile-giving-branch').value;
-        let amount = parseFloat(document.getElementById('mobile-giving-amount').value);
-        const category = document.getElementById('mobile-giving-category').value;
-        const method = document.getElementById('mobile-giving-method').value;
-        const frequency = document.getElementById('mobile-giving-frequency').value;
-        const coverFees = document.getElementById('mobile-giving-cover-fees').checked;
-
-        if (isNaN(amount) || amount <= 0) { this.toast('Enter a valid amount greater than Ksh 0.', 'error'); return; }
-
-        let feeAdded = 0;
-        if (coverFees) {
-            feeAdded = this.givingFee(amount, method);
-            amount = Math.round(amount + feeAdded);
-        }
-
-        const branchObj = this.db.branches.find(b => b.id === branchId);
-
-        // Assume logged-in member John Kamau (m1) is doing the giving
-        const loggedInMemberId = 'm1';
-        const memberObj = this.db.members.find(m => m.id === loggedInMemberId);
-
-        const newTx = {
-            id: `t_${Date.now()}`,
-            branchId,
-            branchName: branchObj.name,
-            memberId: loggedInMemberId,
-            memberName: `${memberObj.firstName} ${memberObj.lastName}`,
-            amount,
-            category,
-            date: new Date().toISOString().split('T')[0],
-            paymentMethod: method,
-            receiptNumber: `REC-2026-${Math.floor(Math.random() * 90000) + 10000}`
-        };
-
-        this.db.transactions.unshift(newTx);
-
-        // Recurring schedule
-        let recurringNote = '';
-        if (frequency !== 'once') {
-            this.db.recurringGifts = this.db.recurringGifts || [];
-            const next = new Date();
-            next.setDate(next.getDate() + (frequency === 'weekly' ? 7 : 30));
-            this.db.recurringGifts.unshift({
-                id: `rec_${Date.now()}`,
-                memberId: loggedInMemberId,
-                memberName: `${memberObj.firstName} ${memberObj.lastName}`,
-                branchId,
-                branchName: branchObj.name,
-                amount,
-                category,
-                frequency,
-                method,
-                nextDate: next.toISOString().split('T')[0],
-                active: true
-            });
-            recurringNote = `<p style="font-size:0.7rem; color:#34d399; margin-top:6px;">🔁 Recurring ${esc(frequency)} gift scheduled — next on ${esc(next.toISOString().split('T')[0])}.</p>`;
-        }
-
-        // Boost engagement index
-        memberObj.engagement_score = Math.min(memberObj.engagement_score + 5, 100);
-        this.saveDB();
-        this.apiWrite(
-            () => Church2API.recordTransaction({ memberId: loggedInMemberId, amount, category, paymentMethod: method, date: newTx.date, branchId }),
-            (srv) => { if (srv && srv.id) { newTx.id = srv.id; if (srv.receiptNumber) newTx.receiptNumber = srv.receiptNumber; } }
-        );
-
-        document.getElementById('mobile-giving-form').reset();
-
-        // Generate simulated mobile success dialog
-        const modal = document.getElementById('mobile-giving-success-overlay');
-        modal.style.display = 'flex';
-        modal.innerHTML = `
-            <div style="background: #1c1c2d; padding:20px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); width: 85%; max-width:280px; text-align:center;">
-                <span style="font-size:3rem;">🎉</span>
-                <h4 style="color:#fff; margin-top:10px;">Giving Successful!</h4>
-                <p style="font-size:0.75rem; color:#9ca3af; margin-top:5px;">Thank you for your donation of <strong style="color:#fff;">${money(amount)}</strong> toward ${esc(category)}.${feeAdded ? ` <span style="color:#9ca3af;">(includes ${money(feeAdded)} transaction charge)</span>` : ''}</p>
-                <p style="font-size:0.7rem; color:#93c5fd; font-weight:bold; margin-top:8px;">Receipt Generated: ${esc(newTx.receiptNumber)}</p>
-                ${recurringNote}
-                <button class="btn btn-primary-gradient btn-sm" style="margin-top:15px; width:100%;" onclick="document.getElementById('mobile-giving-success-overlay').style.display='none'">Awesome</button>
-            </div>
-        `;
-
-        this.renderAll();
-    },
-
-    renderMobileServe() {
-        const openRolesContainer = document.getElementById('mobile-open-serve-roles');
-        openRolesContainer.innerHTML = '';
-
-        // Extract list of all open positions in upcoming events
-        this.db.events.forEach(e => {
-            e.rolesRequired.forEach(role => {
-                // Check if someone has signed up
-                const isAssigned = e.volunteersSignedUp.some(mId => {
-                    const member = this.db.members.find(m => m.id === mId);
-                    return member && member.volunteer_skills.includes(role);
-                });
-
-                if (!isAssigned) {
-                    const div = document.createElement('div');
-                    div.className = 'mobile-serve-item-card';
-                    div.innerHTML = `
-                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
-                            <div style="min-width:0;">
-                                <strong style="font-size:0.8rem; color:var(--text-primary); display:block;">${esc(role)}</strong>
-                                <span style="font-size:0.7rem; color:var(--text-secondary); display:block;">Event: ${esc(e.title)}</span>
-                                <span style="font-size:0.7rem; color:var(--accent-gold); display:block;">Date: ${esc(e.date)}</span>
-                            </div>
-                            <button class="mobile-apply-btn" style="flex:0 0 auto;" onclick="ChurchApp.handleMobileServeSignup('${esc(e.id)}', '${esc(role).replace(/'/g, "\\'")}')">Serve</button>
-                        </div>
-                    `;
-                    openRolesContainer.appendChild(div);
-                }
-            });
-        });
-
-        if (openRolesContainer.innerHTML === '') {
-            openRolesContainer.innerHTML = `<div class="empty-state small">✅<span>All volunteer slots are fully rostered. Thank you!</span></div>`;
-        }
-
-        // Render current member skills list
-        const m1 = this.db.members.find(m => m.id === 'm1');
-        const skillsContainer = document.getElementById('mobile-my-skills-list');
-        skillsContainer.innerHTML = m1.volunteer_skills.map(s => `<span class="skill-tag">${esc(s)}</span>`).join('');
-    },
-
-    handleMobileServeSignup(eventId, role) {
-        // Logged-in member John Kamau (m1) registers
-        const event = this.db.events.find(e => e.id === eventId);
-        const m1 = this.db.members.find(m => m.id === 'm1');
-        
-        if (event && m1) {
-            // Check if member already has this skill, if not add it
-            if (!m1.volunteer_skills.includes(role)) {
-                m1.volunteer_skills.push(role);
-            }
-
-            if (!event.volunteersSignedUp.includes('m1')) {
-                event.volunteersSignedUp.push('m1');
-            }
-
-            // Boost engagement index
-            m1.engagement_score = Math.min(m1.engagement_score + 6, 100);
-            this.saveDB();
-
-            this.toast(`You're serving as ${role} for ${event.title}. Thank you!`);
-            this.renderAll();
-        }
-    },
-
-    handleMobileVolunteerSignup() {
-        const input = document.getElementById('new-skill-input');
-        if (!input || !input.value.trim()) return;
-
-        const newSkill = input.value.trim();
-        const m1 = this.db.members.find(m => m.id === 'm1');
-        if (m1) {
-            if (!m1.volunteer_skills.includes(newSkill)) {
-                m1.volunteer_skills.push(newSkill);
-            }
-            this.saveDB();
-            input.value = '';
-            this.renderMobileServe();
-        }
-    },
-
-    renderMobileChat() {
-        const body = document.getElementById('mobile-chat-body');
-        // Check for a rendered bubble, not for empty innerHTML — the markup ships
-        // with an HTML comment placeholder, which is never the empty string.
-        if (!body.querySelector('.chat-bubble')) {
-            // Seed welcome message
-            body.innerHTML = `
-                <div class="chat-bubble bot">
-                    <p>Hello John! I am your <strong>Pastoral Care Assistant</strong>. Feel free to ask me anything about service schedules, digital tithing, community cell groups, or volunteering roles. 🕊️</p>
-                    <span class="chat-time">${new Date().toLocaleTimeString(undefined, {hour: '2-digit', minute:'2-digit'})}</span>
-                </div>
-            `;
-        }
-    },
-
-    handleMobileChatSend() {
-        const input = document.getElementById('mobile-chat-input');
-        const text = input.value.trim();
-        if (!text) return;
-
-        const body = document.getElementById('mobile-chat-body');
-
-        // Add user bubble
-        const userDiv = document.createElement('div');
-        userDiv.className = 'chat-bubble user';
-        userDiv.innerHTML = `
-            <p>${esc(text)}</p>
-            <span class="chat-time">${new Date().toLocaleTimeString(undefined, {hour: '2-digit', minute:'2-digit'})}</span>
-        `;
-        body.appendChild(userDiv);
-        input.value = '';
-
-        // Scroll chat
-        body.scrollTop = body.scrollHeight;
-
-        // Simulate AI Bot response after 600ms
-        setTimeout(() => {
-            const botResponse = window.AIEngine.getBotResponse(text);
-            
-            // Parse optional quick-reply buttons and strip those lines from the
-            // spoken text so options render only as buttons (not duplicated inline).
-            const options = [];
-            const textLines = [];
-            botResponse.split('\n').forEach(line => {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('- **') && trimmed.includes('**')) {
-                    options.push(trimmed.split('**')[1]);
-                } else if (trimmed.startsWith('- ') && trimmed.length > 2) {
-                    options.push(trimmed.substring(2));
-                } else {
-                    textLines.push(line);
-                }
-            });
-
-            let buttonsHtml = '';
-            if (options.length > 0) {
-                buttonsHtml = `
-                    <div class="chat-options-container">
-                        ${options.map(opt => `
-                            <button class="chat-option-btn" onclick="ChurchApp.handleChatOptionClick('${esc(opt).replace(/'/g, "\\'")}')">${esc(opt)}</button>
-                        `).join('')}
-                    </div>
-                `;
-            }
-
-            const botDiv = document.createElement('div');
-            botDiv.className = 'chat-bubble bot animate-fade-in';
-            botDiv.innerHTML = `
-                <div class="md-body chat-md">${renderMarkdown(textLines.join('\n'))}</div>
-                ${buttonsHtml}
-                <span class="chat-time">${new Date().toLocaleTimeString(undefined, {hour: '2-digit', minute:'2-digit'})}</span>
-            `;
-            body.appendChild(botDiv);
-            body.scrollTop = body.scrollHeight;
-        }, 600);
-    },
-
-    handleChatOptionClick(optionValue) {
-        const input = document.getElementById('mobile-chat-input');
-        if (input) {
-            input.value = optionValue;
-            this.handleMobileChatSend();
-        }
-    },
-
-    // UI Helpers
-    _lastFocusedBeforeModal: null,
-
-    openModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (!modal) return;
-        this._lastFocusedBeforeModal = document.activeElement;
-        modal.style.display = 'flex';
-        // Move focus into the dialog for keyboard/screen-reader users.
-        const focusTarget = modal.querySelector('.modal-close, [autofocus], button, input, a[href]');
-        if (focusTarget) focusTarget.focus();
-
-        // Trap Tab focus within the dialog so keyboard users can't tab into the
-        // page behind the overlay.
-        this._trapHandler = (e) => {
-            if (e.key !== 'Tab') return;
-            const focusables = modal.querySelectorAll('button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])');
-            if (!focusables.length) return;
-            const first = focusables[0];
-            const last = focusables[focusables.length - 1];
-            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-        };
-        modal.addEventListener('keydown', this._trapHandler);
-    },
-
-    closeModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.style.display = 'none';
-            if (this._trapHandler) { modal.removeEventListener('keydown', this._trapHandler); this._trapHandler = null; }
-        }
-        // Restore focus to whatever opened the modal.
-        if (this._lastFocusedBeforeModal && typeof this._lastFocusedBeforeModal.focus === 'function') {
-            this._lastFocusedBeforeModal.focus();
-            this._lastFocusedBeforeModal = null;
-        }
-    },
-
-    closeAnyOpenModal() {
-        ['member-detail-modal', 'ai-matcher-modal', 'receipt-modal'].forEach((id) => {
-            const modal = document.getElementById(id);
-            if (modal && modal.style.display === 'flex') this.closeModal(id);
-        });
-    },
-
     // Non-blocking toast notification — replaces alert() for friendlier feedback.
     toast(message, type = 'success') {
         let container = document.getElementById('toast-container');
@@ -3392,42 +3763,7 @@ const ChurchApp = {
         }, 3600);
     },
 
-    // Direct submit prayer request from mobile app
-    submitMobilePrayer() {
-        const textarea = document.getElementById('mobile-prayer-textarea');
-        const text = textarea.value.trim();
-        if (!text) return;
 
-        // Categorize via AI
-        const categoryResult = window.AIEngine.categorizePrayerRequest(text);
-
-        const newPrayer = {
-            id: `pr_${Date.now()}`,
-            memberId: 'm1',
-            memberName: 'John Kamau',
-            // Derive the campus from the member record rather than hardcoding
-            // one, so the prayer routes to the right campus after a rebrand.
-            branchName: (this.db.members.find(m => m.id === 'm1') || {}).branchName
-                || (this.db.branches[0] && this.db.branches[0].name) || 'Main Campus',
-            text: text,
-            category: categoryResult.category,
-            route: categoryResult.route,
-            status: 'Assigned',
-            timestamp: new Date().toISOString()
-        };
-
-        this.db.prayerRequests.push(newPrayer);
-        this.saveDB();
-        this.apiWrite(
-            () => Church2API.submitPrayer({ memberId: 'm1', memberName: newPrayer.memberName, branchName: newPrayer.branchName, text, category: newPrayer.category, route: newPrayer.route }),
-            (srv) => { if (srv && srv.id) newPrayer.id = srv.id; }
-        );
-        textarea.value = '';
-
-        this.toast(`Prayer received — categorized as “${categoryResult.category}” and routed to ${categoryResult.route}.`, 'info');
-
-        this.renderAll();
-    }
 };
 
 // Start application.
@@ -3444,7 +3780,33 @@ const bootChurchApp = () => {
 
     // Close modals on Escape and on backdrop click — expected dialog behavior.
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') ChurchApp.closeAnyOpenModal();
+        if (e.key === 'Escape') {
+            ChurchApp.closeAnyOpenModal();
+            return;
+        }
+        if (e.key !== 'Tab') return;
+
+        const openModals = [...document.querySelectorAll('.modal-overlay')]
+            .filter((overlay) => overlay.style.display !== 'none' && getComputedStyle(overlay).display !== 'none');
+        const modal = openModals[openModals.length - 1];
+        if (!modal) return;
+        const focusable = [...modal.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )].filter((element) => element.getClientRects().length > 0);
+        if (!focusable.length) {
+            e.preventDefault();
+            modal.querySelector('.modal-card')?.focus();
+            return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
     });
     document.querySelectorAll('.modal-overlay').forEach((overlay) => {
         overlay.addEventListener('click', (e) => {

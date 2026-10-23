@@ -1,4 +1,4 @@
-// Maximum Miracle Centre — Client-Side Ministry Intelligence Simulation
+// Christian Mission Dunamis — Client-Side Ministry Intelligence Simulation
 // Designed to mimic advanced Natural Language Processing and Analytics
 
 const AIEngine = {
@@ -149,7 +149,7 @@ const AIEngine = {
         },
         {
             keywords: ['location', 'branch', 'branches', 'where', 'address'],
-            response: "Maximum Miracle Centre is one church meeting in several places:\n1. **Nairobi CBD**: Embassy Cinema, Latema Road, off Tom Mboya Street.\n2. **Kawangware**: Kawangware, Nairobi.\n3. **Nakuru**: Langa Langa, Kanu Street.\nSelect your campus in your profile to stay updated with local events."
+            response: "Christian Mission Dunamis is one church meeting in several places:\n1. **Accra Main**: Central Accra, Ghana.\n2. **Kumasi Branch**: Kumasi, Ghana.\n3. **Takoradi Branch**: Takoradi, Ghana.\nSelect your campus in your profile to stay updated with local events."
         },
         {
             keywords: ['prayer', 'pray', 'request', 'pastor', 'help'],
@@ -157,7 +157,7 @@ const AIEngine = {
         },
         {
             keywords: ['group', 'small group', 'cell', 'fellowship', 'community'],
-            response: "Home fellowships meet through the week across Nairobi and Nakuru. Tap **Connect** on the home feed to find a group near you — Young Adults, Family Life & Marriage, Men's Morning Prayer or Women of Grace."
+            response: "Home fellowships meet through the week across Accra, Kumasi and Takoradi. Tap **Connect** on the home feed to find a group near you — Young Adults, Family Life & Marriage, Men's Morning Prayer or Women of Grace."
         },
         {
             keywords: ['hello', 'hi', 'hey', 'greetings'],
@@ -210,7 +210,7 @@ const AIEngine = {
                 return item.response;
             }
         }
-        return "Thank you for reaching out. I'm not fully sure about that detail, but you can check the digital bulletin or contact the church office at info@maximummiracle.org. Would you like to submit a prayer request instead?";
+        return "Thank you for reaching out. I'm not fully sure about that detail, but you can check the digital bulletin or contact the church office at info@chritianmissiondunamis.org. Would you like to submit a prayer request instead?";
     },
 
     // 2. Weekly Ministry Health Snapshot Compiler
@@ -356,7 +356,7 @@ const AIEngine = {
                 day3: `**Day 3: Living with Open Hands**\n*Read*: Proverbs 11:25\n*Reflection*: A generous soul will prosper. Generosity isn't a transaction; it's a transformation of our character. How can you show unexpected generosity to a neighbor or coworker today?`
             },
             socialQuotes: [
-                `"${mainPoint}" — Preached at Maximum Miracle Centre`,
+                `"${mainPoint}" — Preached at Christian Mission Dunamis`,
                 `"Generosity isn't about the size of our bank accounts, it's about the state of our hearts."`,
                 `"${subPoint} Open hands let God fill us with grace."`
             ],

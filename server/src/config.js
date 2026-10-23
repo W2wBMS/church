@@ -11,11 +11,24 @@ const required = (name, fallback) => {
   return v;
 };
 
+const jwtSecret = required('JWT_SECRET', process.env.NODE_ENV === 'production' ? undefined : 'dev-insecure-secret-change-me');
+if (process.env.NODE_ENV === 'production' && (jwtSecret.length < 32 || /CHANGE_ME|insecure|development|dev-/i.test(jwtSecret))) {
+  throw new Error('JWT_SECRET must be a strong, unique production secret of at least 32 characters');
+}
+
+const corsOrigins = (process.env.CORS_ORIGINS || (process.env.NODE_ENV === 'production' ? '' : '*'))
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+if (process.env.NODE_ENV === 'production' && corsOrigins.length === 0) {
+  throw new Error('CORS_ORIGINS must be configured in production');
+}
+
 export const config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '4000', 10),
 
-  // Postgres — either a single DATABASE_URL or discrete PG* vars.
+  // Postgres — either a single DATABA SE_URL or discrete PG* vars.
   databaseUrl: process.env.DATABASE_URL || null,
   pg: {
     host: process.env.PGHOST || 'localhost',
@@ -26,13 +39,10 @@ export const config = {
   },
 
   // Auth
-  jwtSecret: required('JWT_SECRET', process.env.NODE_ENV === 'production' ? undefined : 'dev-insecure-secret-change-me'),
+  jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '12h',
   bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS || '12', 10),
 
   // CORS — comma-separated allowed origins (the Vercel frontend URL in prod).
-  corsOrigins: (process.env.CORS_ORIGINS || '*')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean),
+  corsOrigins,
 };

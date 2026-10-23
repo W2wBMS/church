@@ -1,17 +1,139 @@
-# Maximum Miracle Centre — Production Deployment Runbook
+# Christian Mission Dunamis — Production Deployment Runbook
 
-This deploys the platform across your two resources:
+This runbook documents two hosting routes:
 
-- **Vercel** → the static frontend (repo root: `index.html`, `app.js`, `styles.css`, `js/`, `vendor/`, `icon.svg`, `manifest.json`, `sw.js`).
-- **Contabo VPS** → the API (`server/`) + PostgreSQL + nginx (TLS), via Docker Compose in `deploy/`.
+- **Managed testing setup (no custom domain):** Netlify hosts the static frontend and Render hosts the API and PostgreSQL. Provider subdomains supply HTTPS.
+- **VPS production setup:** Vercel hosts the static frontend and a Contabo VPS hosts the API, PostgreSQL, and nginx/TLS using Docker Compose.
 
 ```
-Browser ──► Vercel (static SPA) ──HTTPS──► Contabo nginx ──► API container ──► Postgres
+Browser ──HTTPS──► Netlify or Vercel (static SPA)
+                         │
+                         └──HTTPS──► Render or VPS API ──► PostgreSQL
 ```
 
-The frontend also runs **standalone** (localStorage demo) when no API is configured — so a Vercel deploy works immediately, and you "light up" the backend by pointing it at your API URL.
+The frontend also runs **standalone** (localStorage demo) when no API is configured. An API-backed deployment requires a separately deployed API, PostgreSQL, and a real account provisioned in that database.
 
 > Architecture note: the API enforces auth + RBAC + campus scoping **server-side** (a branch admin cannot read another campus even by tampering with requests). Secrets come only from environment variables; nothing sensitive is committed.
+
+---
+
+## Managed testing setup — Netlify + Render (no custom domain)
+
+Use this route if you have Netlify and Render accounts but do not own a domain.
+Netlify and Render provide HTTPS subdomains. This is suitable for a temporary
+test, not for important church data: Render's Free web services spin down when
+idle, and Free Render Postgres databases expire after 30 days. Check Render's
+current plan limits before creating resources; do not store important data on
+an expiring test database.
+
+### 1. Deploy the frontend to Netlify
+
+1. Push the repository to a Git provider accessible to Netlify.
+2. In Netlify, create a site by importing that repository.
+3. Use the repository root as the base directory. Leave the build command
+   empty and publish `.`. These settings are also in `netlify.toml`.
+4. Deploy the site and copy its primary HTTPS URL, for example
+   `https://your-site-name.netlify.app`.
+
+At this stage the frontend is in standalone mode. Do not enter the browser
+demo's `admin@...` / `grace` credentials expecting them to authenticate against
+the API.
+
+### 2. Create PostgreSQL on Render
+
+1. In Render, create a PostgreSQL database and select the lowest-cost/free
+   plan available for testing.
+2. Choose a region and record it; the API service must use the same region.
+3. Keep the database's internal connection URL private. It will be linked to
+   the API service as `DATABASE_URL`.
+
+Free PostgreSQL is temporary and can expire after 30 days. Back up anything
+you need before that deadline; use a paid persistent database for data you
+intend to keep.
+
+### 3. Deploy the API on Render
+
+1. Create a Render **Web Service** from the same repository.
+2. Set the runtime to **Docker**, the root directory to `server`, and select
+   the same region as the database.
+3. Set the health check path to `/api/health`.
+4. Add these environment variables in the Render service settings:
+
+   | Key | Value |
+   | --- | --- |
+   | `NODE_ENV` | `production` |
+   | `DATABASE_URL` | Link the Render database's **internal** connection URL. |
+   | `PGSSL` | `require` |
+   | `JWT_SECRET` | A unique random secret of at least 32 characters. Do not reuse a repository or database password. |
+   | `JWT_EXPIRES_IN` | `12h` |
+   | `BCRYPT_ROUNDS` | `12` |
+   | `CORS_ORIGINS` | The exact Netlify HTTPS origin from step 1, with no trailing slash. |
+   | `MFA_DEMO_CODE` | A temporary six-digit test code; this is not production MFA. |
+
+   A random secret can be generated locally with Node.js:
+
+   ```bash
+   node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"
+   ```
+
+   Paste the output into Render's secret environment-variable field. Do not
+   commit it or share it in chat.
+
+5. Deploy the service. The Dockerfile applies the database schema before
+   starting the API.
+6. Copy the Render service's HTTPS URL, then open
+   `https://<render-service>.onrender.com/api/health`. Confirm it returns
+   `{"status":"ok","db":"up"}`.
+
+The migration creates tables and canonical campuses, but **does not create
+demo users or an administrator**. The browser-only demo credentials do not
+exist in the Render database. The app currently has no public admin-creation
+screen; provision an authorized test administrator through a secure database
+administration process before testing the admin console. Never make a public
+bootstrap endpoint or expose database credentials to the browser.
+
+### 4. Connect Netlify to the Render API
+
+After the API URL is available:
+
+1. Edit `js/config.js`. Keep the localhost setting for local development and
+   replace the deployed empty-string fallback with the Render HTTPS origin.
+   For example, change:
+
+   ```js
+   || (isLocalHost ? 'http://localhost:4000' : ''),
+   ```
+
+   to:
+
+   ```js
+   || (isLocalHost ? 'http://localhost:4000' : 'https://your-api.onrender.com'),
+   ```
+
+   Use your actual Render service URL, with no `/api` suffix and no trailing
+   slash. The existing localStorage override still takes precedence.
+2. Commit and push this change. Netlify will publish the new configuration.
+3. In Render, verify `CORS_ORIGINS` exactly matches the public Netlify site
+   origin, then redeploy/restart the API if you changed it.
+4. Open the Netlify site and test the login with the administrator account
+   provisioned in the Render database. The API's demo MFA verifier expects the
+   `MFA_DEMO_CODE` value.
+
+If a Netlify deploy-preview URL is used for testing, add that exact origin to
+`CORS_ORIGINS` as an additional comma-separated value. Keep the list limited
+to origins you control.
+
+### 5. Testing limitations
+
+- Render Free web services may take about a minute to wake after inactivity.
+- Render Free Postgres expires after 30 days; it is not suitable for retained
+  member or giving records.
+- This repository's MFA check is a fixed demo-code verifier, not real TOTP or
+  SMS verification.
+- Giving endpoints record contributions; they do not charge a payment method.
+- Announcement endpoints store announcement records; they do not deliver
+  email, SMS, or push notifications.
+- Do not use this test deployment for confidential or production church data.
 
 ---
 
@@ -59,11 +181,7 @@ The frontend also runs **standalone** (localStorage demo) when no API is configu
    ```
    The API container runs migrations automatically on start.
 
-6. **Seed the initial data** (first time only — creates the demo login accounts and sample data):
-   ```bash
-   docker compose exec api node src/db/seed.js
-   ```
-   > For a real launch, create your own admin instead of seeding demo data, and set a strong `SEED_PASSWORD` or change passwords immediately after.
+6. **Provision the initial administrator** using your approved secure account-provisioning process. Migrations create the schema only; this project does not seed demo records or demo login accounts.
 
 7. **Verify**:
    ```bash
@@ -96,14 +214,14 @@ Certbot auto-renews certificates every 12h; nginx picks up renewed certs on relo
 
 ## Verify the whole path
 
-Open the Vercel URL and sign in (`admin@maximummiracle.org` / seeded password, MFA code `123456`).
+Open the Vercel URL and sign in with the HQ administrator provisioned for the API, using the configured MFA code.
 You should see real data served from Postgres on Contabo. A wrong password is rejected by the server; a branch admin only ever sees their own campus.
 
 ---
 
 ## Security checklist before real launch
 
-- [ ] Replace the seeded demo accounts with real staff accounts; rotate all passwords.
+- [ ] Provision real staff accounts; the API does not create demo accounts or sample records.
 - [ ] Swap the mock MFA (`MFA_DEMO_CODE`) for real TOTP (the `/auth/mfa` step is structured for this).
 - [ ] Strong, unique `JWT_SECRET` and `PGPASSWORD` (never commit `.env`).
 - [ ] `CORS_ORIGINS` restricted to your exact frontend origin (no `*`).
@@ -120,7 +238,7 @@ You should see real data served from Postgres on Contabo. A wrong password is re
 
 ---
 
-## Client configuration (Maximum Miracle Centre)
+## Client configuration (Christian Mission Dunamis)
 
 Everything client-specific lives in **two places**, by design:
 
@@ -139,9 +257,9 @@ The frontend deploys to Vercel automatically from `main` via
 
     https://mmc-ministry-console.vercel.app
 
-Sign in with `admin@maximummiracle.org` / the seeded password, MFA code
-`123456`. With no `apiBase` configured the deploy runs in standalone demo mode
-against localStorage — no backend required.
+With no `apiBase` configured the deploy runs in standalone localStorage demo
+mode — no backend required. For the API-backed deployment, sign in with the
+HQ administrator provisioned for that database and its configured MFA code.
 
 > **New Vercel projects ship with Deployment Protection on**, which puts a
 > Vercel login in front of the URL. Before sending the link to the church, turn
@@ -170,4 +288,4 @@ financial section with its own totals.
 - [ ] **M-Pesa paybill / account number.** `js/brand.js` ships `paybill: '891300'` with `shortCodeConfirmed: false` — a placeholder. Replace it with the church's real short code and flip the flag. **Until that flag is `true` the giving screen deliberately shows no number at all**, just a "not live yet, give in person or by bank transfer" notice — a plausible-but-wrong paybill is how a member's tithe reaches a stranger's account.
 - [ ] **Exact brand hex codes** and a vector logo, if the church's designer has them. The current royal-and-gold palette was set from public brand material.
 - [ ] **Campus addresses and service times** in `js/brand.js` (`campuses`, `services`).
-- [ ] **Real staff accounts** — the seeded `@maximummiracle.org` demo logins are for the demo only.
+- [ ] **Real staff accounts** — provision staff accounts for the live API; it has no seeded demo logins.

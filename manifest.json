@@ -1,6 +1,6 @@
 {
-  "short_name": "MMC",
-  "name": "Maximum Miracle Centre — Ministry Console",
+  "short_name": "CMD",
+  "name": "Christian Mission Dunamis — Ministry Console",
   "icons": [
     {
       "src": "icon.svg",
@@ -20,5 +20,5 @@
   "theme_color": "#0b1220",
   "display": "standalone",
   "orientation": "portrait",
-  "description": "Membership, giving, attendance and discipleship for Maximum Miracle Centre."
+  "description": "Membership, giving, attendance and discipleship for Christian Mission Dunamis."
 }

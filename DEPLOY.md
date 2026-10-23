@@ -90,26 +90,11 @@ bootstrap endpoint or expose database credentials to the browser.
 
 After the API URL is available:
 
-1. Edit `frontend/js/config.js`. Keep the localhost setting for local development and
-   replace the deployed empty-string fallback with the Render HTTPS origin.
-   For example, change:
-
-   ```js
-   || (isLocalHost ? 'http://localhost:4000' : ''),
-   ```
-
-   to:
-
-   ```js
-   || (isLocalHost ? 'http://localhost:4000' : 'https://your-api.onrender.com'),
-   ```
-
-   Use your actual Render service URL, with no `/api` suffix and no trailing
-   slash. The existing localStorage override still takes precedence.
-2. Commit and push this change. Netlify will publish the new configuration.
-3. In Render, verify `CORS_ORIGINS` exactly matches the public Netlify site
+1. Set `CORS_ORIGINS` in Render to exactly match the public Netlify site
    origin, then redeploy/restart the API if you changed it.
-4. Open the Netlify site and test the login with the administrator account
+2. The deployed frontend uses the production API origin configured in
+   `frontend/js/config.js`; localStorage overrides still take precedence.
+3. Open the Netlify site and test the login with the administrator account
    provisioned in Supabase. The API's demo MFA verifier expects the
    `MFA_DEMO_CODE` value.
 

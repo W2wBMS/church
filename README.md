@@ -197,8 +197,8 @@ To stop the API, use `Ctrl+C`. For details on deployment and TLS, see
 
 The browser reads its API base URL from `frontend/js/config.js`. On `localhost`
 and `127.0.0.1`, it defaults to `http://localhost:4000`. On a deployed domain,
-the default is empty, so the app remains in standalone preview mode until an
-API URL is configured.
+it defaults to the production API; `church2_api_base` in localStorage can
+override that URL for testing.
 
 For a quick local check, open the browser developer console and set the
 following value before reloading:

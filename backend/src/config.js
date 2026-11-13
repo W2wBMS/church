@@ -16,13 +16,17 @@ if (process.env.NODE_ENV === 'production' && (jwtSecret.length < 32 || /CHANGE_M
   throw new Error('JWT_SECRET must be a strong, unique production secret of at least 32 characters');
 }
 
-const corsOrigins = (process.env.CORS_ORIGINS || (process.env.NODE_ENV === 'production' ? '' : '*'))
+const configuredCorsOrigins = (process.env.CORS_ORIGINS || (process.env.NODE_ENV === 'production' ? '' : '*'))
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
-if (process.env.NODE_ENV === 'production' && corsOrigins.length === 0) {
+if (process.env.NODE_ENV === 'production' && configuredCorsOrigins.length === 0) {
   throw new Error('CORS_ORIGINS must be configured in production');
 }
+const corsOrigins = [...new Set([
+  ...configuredCorsOrigins,
+  ...(process.env.NODE_ENV === 'production' ? ['https://cmdcms.netlify.app'] : []),
+].map((origin) => origin.replace(/\/+$/, '')))];
 
 const supabaseDatabaseUrl = process.env.SUPABASE_DB_URL?.trim();
 if (!supabaseDatabaseUrl) {
@@ -38,6 +42,12 @@ if (!['postgres:', 'postgresql:'].includes(supabaseDatabaseProtocol)) {
   throw new Error('SUPABASE_DB_URL must be a PostgreSQL connection string');
 }
 
+const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/+$/, '') || null;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || null;
+if (Boolean(supabaseUrl) !== Boolean(supabaseAnonKey)) {
+  throw new Error('SUPABASE_URL and SUPABASE_ANON_KEY must both be configured');
+}
+
 export const config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '4000', 10),
@@ -49,7 +59,9 @@ export const config = {
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '12h',
   bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS || '12', 10),
+  supabaseUrl,
+  supabaseAnonKey,
 
-  // CORS — comma-separated allowed origins (the Vercel frontend URL in prod).
+  // CORS — exact allowed origins; the production Netlify site is always included.
   corsOrigins,
 };

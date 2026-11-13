@@ -5,16 +5,84 @@ import { query } from '../db/pool.js';
 import { withTransaction } from '../db/pool.js';
 import { config } from '../config.js';
 import { hashPassword, verifyPassword, issueSession, authenticate } from '../auth.js';
+import { getSupabaseAppAccess, signInWithSupabase } from '../supabase-auth.js';
 
 const router = Router();
 
 const publicUser = (u) => ({ id: u.id, email: u.email, name: u.name, role: u.role, branchId: u.branch_id, memberId: u.member_id || null });
 
 const validEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ''));
+const authError = (status, message) => Object.assign(new Error(message), { status, publicMessage: message });
+
+async function getSupabaseAccount(authUser) {
+  const email = authUser.email.trim().toLowerCase();
+  const { rows } = await query(
+    `SELECT id,email,password_hash,name,role,branch_id,member_id,mfa_enabled,token_version,supabase_user_id
+     FROM users WHERE supabase_user_id=$1 OR lower(email)=$2`,
+    [authUser.id, email]
+  );
+  if (rows.length > 1) {
+    throw authError(409, 'This sign-in is linked to conflicting app accounts. Contact an administrator.');
+  }
+
+  if (rows[0]) {
+    const user = rows[0];
+    if (user.supabase_user_id && user.supabase_user_id !== authUser.id) {
+      throw authError(403, 'This email is already linked to a different Supabase account.');
+    }
+    if (user.email.toLowerCase() !== email) {
+      throw authError(403, 'The Supabase account email changed. Contact an administrator.');
+    }
+    if (!user.supabase_user_id) {
+      if (!authUser.email_confirmed_at && !authUser.confirmed_at) {
+        throw authError(403, 'Confirm your Supabase email before using this account.');
+      }
+      const { rows: linked } = await query(
+        'UPDATE users SET supabase_user_id=$1 WHERE id=$2 AND supabase_user_id IS NULL RETURNING id,email,password_hash,name,role,branch_id,member_id,mfa_enabled,token_version,supabase_user_id',
+        [authUser.id, user.id]
+      );
+      if (!linked[0]) {
+        throw authError(409, 'This account was linked by another sign-in. Please try again.');
+      }
+      return linked[0];
+    }
+    return user;
+  }
+
+  const access = getSupabaseAppAccess(authUser);
+  if (!access) {
+    throw authError(403, 'Your Supabase account is not assigned an app role and campus. Contact an administrator.');
+  }
+  if (access.branchId) {
+    const { rows: branches } = await query('SELECT id FROM branches WHERE id=$1', [access.branchId]);
+    if (!branches[0]) {
+      throw authError(403, 'Your assigned campus is not configured in the app. Contact an administrator.');
+    }
+  }
+
+  const displayName = authUser.user_metadata?.full_name || authUser.user_metadata?.name;
+  const name = typeof displayName === 'string' && displayName.trim()
+    ? displayName.trim().slice(0, 100)
+    : email.split('@')[0];
+  const { rows: created } = await query(
+    `INSERT INTO users (email,password_hash,name,role,branch_id,supabase_user_id)
+     VALUES ($1,NULL,$2,$3,$4,$5)
+     ON CONFLICT (email) DO NOTHING
+     RETURNING id,email,password_hash,name,role,branch_id,member_id,mfa_enabled,token_version,supabase_user_id`,
+    [email, name, access.role, access.branchId, authUser.id]
+  );
+  if (!created[0]) {
+    throw authError(409, 'An app account with this email already exists. Contact an administrator to link it.');
+  }
+  return created[0];
+}
 
 // Public registration can only create a branch member, never an elevated role.
 router.post('/signup', async (req, res, next) => {
   try {
+    if (config.supabaseUrl) {
+      return res.status(409).json({ error: 'Account registration is managed by the church administrator.' });
+    }
     const { email, password, firstName, lastName, phone, branchId = 'b1' } = req.body || {};
     const normalizedEmail = String(email || '').trim().toLowerCase();
     if (!validEmail(normalizedEmail) || typeof password !== 'string' || password.length < 12
@@ -61,10 +129,33 @@ router.post('/login', async (req, res, next) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
+    if (config.supabaseUrl) {
+      let authUser;
+      try {
+        authUser = await signInWithSupabase({
+          url: config.supabaseUrl,
+          anonKey: config.supabaseAnonKey,
+          email: email.trim().toLowerCase(),
+          password,
+        });
+      } catch (error) {
+        console.error('Supabase sign-in request failed:', error);
+        return res.status(503).json({ error: 'The sign-in provider is temporarily unavailable. Please try again.' });
+      }
+      if (!authUser) return res.status(401).json({ error: 'Invalid email or password' });
+
+      const user = await getSupabaseAccount(authUser);
+      if (user.mfa_enabled) {
+        const ticket = jwt.sign({ sub: user.id, purpose: 'mfa' }, config.jwtSecret, { expiresIn: '5m' });
+        return res.json({ mfaRequired: true, ticket });
+      }
+      return res.json({ token: await issueSession(user), user: publicUser(user) });
+    }
+
     const { rows } = await query('SELECT * FROM users WHERE email = $1', [email.trim().toLowerCase()]);
     const user = rows[0];
     // Constant-ish response to avoid user enumeration.
-    const ok = user && (await verifyPassword(password, user.password_hash));
+    const ok = user && user.password_hash && (await verifyPassword(password, user.password_hash));
     if (!ok) return res.status(401).json({ error: 'Invalid email or password' });
 
     if (user.mfa_enabled) {

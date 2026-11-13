@@ -21,13 +21,16 @@ ON CONFLICT (id) DO NOTHING;
 CREATE TABLE IF NOT EXISTS users (
   id            SERIAL PRIMARY KEY,
   email         TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
+  password_hash TEXT,
   name          TEXT NOT NULL,
   role          TEXT NOT NULL CHECK (role IN ('hq_admin','branch_admin','ministry_leader','member')),
   branch_id     TEXT REFERENCES branches(id) ON DELETE SET NULL,
   mfa_enabled   BOOLEAN NOT NULL DEFAULT true,
+  supabase_user_id UUID UNIQUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS supabase_user_id UUID UNIQUE;
 
 CREATE TABLE IF NOT EXISTS members (
   id                  TEXT PRIMARY KEY,

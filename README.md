@@ -213,8 +213,11 @@ described in [DEPLOY.md](./DEPLOY.md), then set the API's `CORS_ORIGINS` to the
 exact frontend origin. The browser will call the API under `/api`; do not put
 `/api` at the end of `apiBase`.
 
-When the API is connected, a real user account provisioned for that database
-is required. There is no built-in production administrator login.
+When the API is connected, sign-in can use Supabase Auth by setting
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` on the API. Users also need a trusted app
+role/campus mapping; matching verified app accounts are linked by email, while
+new accounts require trusted `app_metadata`. There is no built-in production
+administrator login.
 
 ## Environment configuration
 
@@ -232,11 +235,17 @@ commit a real `.env` file or expose backend secrets in browser JavaScript.
 | `NODE_ENV` | API | Runtime mode. Use `production` in deployment. |
 | `PORT` | API | API listen port; defaults to `4000`. |
 | `SUPABASE_DB_URL` | API | Required Supabase Session pooler PostgreSQL connection string, including `sslmode=require`. Keep it private and server-side. |
+| `SUPABASE_URL` | API | Optional Supabase project URL; enables Supabase Auth password verification when paired with `SUPABASE_ANON_KEY`. |
+| `SUPABASE_ANON_KEY` | API | Optional Supabase publishable/anon key. Never use the service-role key in the frontend. |
 | `JWT_SECRET` | API | Secret used to sign authentication tokens. Production requires at least 32 characters and rejects known placeholder-like values. |
 | `JWT_EXPIRES_IN` | API | Token lifetime; defaults to `12h`. |
 | `BCRYPT_ROUNDS` | API | Password hashing work factor; defaults to `12`. |
 | `MFA_DEMO_CODE` | API | Current demo MFA verifier code. Replace the demo MFA implementation before a real production launch. |
 | `CORS_ORIGINS` | API | Comma-separated list of allowed frontend origins. Required in production; use exact origins, not `*`. |
+
+With Supabase Auth enabled, roles and campus assignments come only from the
+app's database profile or trusted Supabase `app_metadata` fields
+`church_role` and `church_branch_id`; user-editable metadata is not trusted.
 
 The `deploy/.env.example` template is intended for the backend container in the
 Compose deployment. Supabase hosts the database separately; Compose does not

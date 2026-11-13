@@ -58,6 +58,8 @@ the API.
    | --- | --- |
    | `NODE_ENV` | `production` |
    | `SUPABASE_DB_URL` | The Supabase Session pooler PostgreSQL connection string from step 2. |
+   | `SUPABASE_URL` | The Supabase project URL, e.g. `https://<project-ref>.supabase.co`. |
+   | `SUPABASE_ANON_KEY` | The project's publishable/anon key. Never use the service-role key. |
    | `JWT_SECRET` | A unique random secret of at least 32 characters. Do not reuse a repository or database password. |
    | `JWT_EXPIRES_IN` | `12h` |
    | `BCRYPT_ROUNDS` | `12` |
@@ -86,12 +88,25 @@ screen; provision an authorized test administrator through a secure database
 administration process before testing the admin console. Never make a public
 bootstrap endpoint or expose database credentials to the browser.
 
+When `SUPABASE_URL` and `SUPABASE_ANON_KEY` are set, API sign-in verifies
+passwords with Supabase Auth. The app still keeps roles and campus access in
+its own `public.users` table. A verified Supabase account can be linked to an
+existing app user by email; otherwise, set trusted Supabase `app_metadata`
+fields `church_role` and (for non-HQ users) `church_branch_id` before signing
+in. Valid roles are `hq_admin`, `branch_admin`, `ministry_leader`, and `member`;
+campus values must match this app's `branches.id`. The API ignores
+user-editable `user_metadata` for authorization. New accounts with valid
+trusted metadata are added to the app table at first sign-in. Account signup
+through this API is disabled when Supabase Auth is enabled.
+
 ### 4. Connect Netlify to the Render API
 
 After the API URL is available:
 
-1. Set `CORS_ORIGINS` in Render to exactly match the public Netlify site
-   origin, then redeploy/restart the API if you changed it.
+1. Set `CORS_ORIGINS` in Render to the public Netlify site origin
+   (`https://cmdcms.netlify.app`, without a trailing slash), then redeploy or
+   restart the API if you changed it. The API also includes that production
+   Netlify origin in its CORS allowlist.
 2. The deployed frontend uses the production API origin configured in
    `frontend/js/config.js`; localStorage overrides still take precedence.
 3. Open the Netlify site and test the login with the administrator account
